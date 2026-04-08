@@ -39,6 +39,7 @@
 #include <faiss/IndexRefine.h>
 #include <faiss/IndexRowwiseMinMax.h>
 #include <faiss/IndexScalarQuantizer.h>
+#include <faiss/IndexTurboQuant.h>
 
 #include <faiss/MetaIndexes.h>
 #include <faiss/VectorTransform.h>
@@ -289,6 +290,8 @@ Index* Cloner::clone_Index(const Index* index) {
     TRYCLONE(IndexPQFastScan, index)
 
     TRYCLONE(IndexScalarQuantizer, index)
+    TRYCLONE(IndexTurboQuantMSE, index)
+    TRYCLONE(IndexTurboQuantProd, index)
     TRYCLONE(MultiIndexQuantizer, index)
 
     if (const IndexIVF* ivf = dynamic_cast<const IndexIVF*>(index)) {
@@ -393,6 +396,8 @@ Index* Cloner::clone_Index(const Index* index) {
 } // namespace
 
 Quantizer* clone_Quantizer(const Quantizer* quant) {
+    TRYCLONE(TurboQuantProdQuantizer, quant)
+    TRYCLONE(TurboQuantMSEQuantizer, quant)
     TRYCLONE(ResidualQuantizer, quant)
     TRYCLONE(LocalSearchQuantizer, quant)
     TRYCLONE(ProductQuantizer, quant)

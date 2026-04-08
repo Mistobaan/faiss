@@ -115,6 +115,7 @@ typedef uint64_t size_t;
 #include <faiss/utils/quantize_lut.h>
 
 #include <faiss/IndexScalarQuantizer.h>
+#include <faiss/IndexTurboQuant.h>
 #include <faiss/IndexIVFAdditiveQuantizer.h>
 #include <faiss/IndexIVFSpectralHash.h>
 #include <faiss/impl/ThreadedIndex.h>
@@ -204,6 +205,7 @@ typedef uint64_t size_t;
 
 #include <faiss/impl/RaBitQuantizer.h>
 #include <faiss/impl/RaBitQUtils.h>
+#include <faiss/impl/TurboQuantizer.h>
 #include <faiss/IndexRaBitQ.h>
 #include <faiss/IndexRaBitQFastScan.h>
 #include <faiss/IndexIVFRaBitQ.h>
@@ -554,6 +556,11 @@ void gpu_sync_all_devices()
 %include  <faiss/IVFlib.h>
 %include  <faiss/impl/ScalarQuantizer.h>
 %include  <faiss/IndexScalarQuantizer.h>
+// Keep TurboQuant's internal codec state as a C++ implementation detail.
+%ignore faiss::IndexTurboQuantMSE::tqmse;
+%ignore faiss::IndexTurboQuantProd::tqprod;
+%ignore faiss::TurboQuantProdQuantizer::tqmse;
+%include  <faiss/IndexTurboQuant.h>
 %include  <faiss/IndexIVFSpectralHash.h>
 %include  <faiss/IndexIVFAdditiveQuantizer.h>
 %include  <faiss/impl/hnsw/MinimaxHeap.h>
@@ -670,6 +677,7 @@ void gpu_sync_all_devices()
 
 %include <faiss/impl/RaBitQuantizer.h>
 %include <faiss/impl/RaBitQUtils.h>
+%include <faiss/impl/TurboQuantizer.h>
 %include <faiss/IndexRaBitQ.h>
 %include <faiss/IndexRaBitQFastScan.h>
 %include <faiss/IndexIVFRaBitQ.h>
@@ -819,6 +827,8 @@ void gpu_sync_all_devices()
     DOWNCAST ( IndexProductResidualQuantizer )
     DOWNCAST ( IndexProductLocalSearchQuantizer )
     DOWNCAST ( IndexScalarQuantizer )
+    DOWNCAST ( IndexTurboQuantMSE )
+    DOWNCAST ( IndexTurboQuantProd )
     DOWNCAST ( IndexLSH )
     DOWNCAST ( IndexLattice )
     DOWNCAST ( IndexPreTransform )
@@ -928,6 +938,8 @@ void gpu_sync_all_devices()
 }
 
 %typemap(out) faiss::Quantizer * {
+    DOWNCAST (TurboQuantProdQuantizer)
+    DOWNCAST (TurboQuantMSEQuantizer)
     DOWNCAST (ScalarQuantizer)
     DOWNCAST (ProductQuantizer)
     DOWNCAST (LocalSearchQuantizer)

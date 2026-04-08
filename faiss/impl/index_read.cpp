@@ -63,6 +63,7 @@
 #include <faiss/svs/IndexSVSVamanaLeanVec.h>
 #endif
 #include <faiss/IndexScalarQuantizer.h>
+#include <faiss/IndexTurboQuant.h>
 #include <faiss/MetaIndexes.h>
 #include <faiss/VectorTransform.h>
 
@@ -1283,6 +1284,54 @@ static void read_NNDescent(NNDescent& nnd, IOReader* f) {
     }
 }
 
+static void read_TurboQuantMSEQuantizer(
+        TurboQuantMSEQuantizer* tqmse,
+        IOReader* f,
+        size_t expected_d) {
+    size_t serialized_code_size = 0;
+    READ1(tqmse->nbits);
+    READ1(tqmse->seed);
+    READ1(tqmse->store_norm);
+    READ1(tqmse->d);
+    READ1(serialized_code_size);
+    FAISS_THROW_IF_NOT_FMT(
+            expected_d == tqmse->d,
+            "TurboQuant d %zu != index header d %d",
+            tqmse->d,
+            int(expected_d));
+    READVECTOR(tqmse->centroids);
+    tqmse->initialize_from_serialized_state();
+    FAISS_THROW_IF_NOT_FMT(
+            tqmse->code_size == serialized_code_size,
+            "invalid TurboQuant code_size %zu (expected %zu)",
+            tqmse->code_size,
+            serialized_code_size);
+}
+
+static void read_TurboQuantProdQuantizer(
+        TurboQuantProdQuantizer* tqprod,
+        IOReader* f,
+        size_t expected_d) {
+    size_t serialized_code_size = 0;
+    READ1(tqprod->nbits);
+    READ1(tqprod->seed);
+    READ1(tqprod->store_norm);
+    READ1(tqprod->d);
+    READ1(serialized_code_size);
+    FAISS_THROW_IF_NOT_FMT(
+            expected_d == tqprod->d,
+            "TurboQuantProd d %zu != index header d %d",
+            tqprod->d,
+            int(expected_d));
+    read_TurboQuantMSEQuantizer(&tqprod->tqmse, f, expected_d);
+    tqprod->initialize_from_serialized_state();
+    FAISS_THROW_IF_NOT_FMT(
+            tqprod->code_size == serialized_code_size,
+            "invalid TurboQuantProd code_size %zu (expected %zu)",
+            tqprod->code_size,
+            serialized_code_size);
+}
+
 std::unique_ptr<ProductQuantizer> read_ProductQuantizer_up(const char* fname) {
     FileIOReader reader(fname);
     return read_ProductQuantizer_up(&reader);
@@ -1824,6 +1873,20 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
         read_vector(idxs->codes, f);
         idxs->code_size = idxs->sq.code_size;
         idx = std::move(idxs);
+    } else if (h == fourcc("IxTM")) {
+        auto idxtq = std::make_unique<IndexTurboQuantMSE>();
+        read_index_header(*idxtq, f);
+        read_TurboQuantMSEQuantizer(&idxtq->tqmse, f, idxtq->d);
+        read_vector(idxtq->codes, f);
+        idxtq->code_size = idxtq->tqmse.code_size;
+        idx = std::move(idxtq);
+    } else if (h == fourcc("IxTP")) {
+        auto idxtqprod = std::make_unique<IndexTurboQuantProd>();
+        read_index_header(*idxtqprod, f);
+        read_TurboQuantProdQuantizer(&idxtqprod->tqprod, f, idxtqprod->d);
+        read_vector(idxtqprod->codes, f);
+        idxtqprod->code_size = idxtqprod->tqprod.code_size;
+        idx = std::move(idxtqprod);
     } else if (h == fourcc("IxLa")) {
         int d, nsq, scale_nbit, r2;
         READ1(d);

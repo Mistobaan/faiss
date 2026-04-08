@@ -99,6 +99,7 @@ set(FAISS_SRC
   IndexShards.cpp
   IndexShardsIVF.cpp
   IndexNeuralNetCodec.cpp
+  IndexTurboQuant.cpp
   MatrixStats.cpp
   MetaIndexes.cpp
   VectorTransform.cpp
@@ -126,6 +127,7 @@ set(FAISS_SRC
   impl/LocalSearchQuantizer.cpp
   impl/ProductAdditiveQuantizer.cpp
   impl/ScalarQuantizer.cpp
+  impl/TurboQuantizer.cpp
   impl/scalar_quantizer/training.cpp
   impl/index_read.cpp
   impl/index_write.cpp
@@ -219,6 +221,7 @@ set(FAISS_HEADERS
   IndexScalarQuantizer.h
   IndexShards.h
   IndexShardsIVF.h
+  IndexTurboQuant.h
   MatrixStats.h
   MetaIndexes.h
   MetricType.h
@@ -259,6 +262,7 @@ set(FAISS_HEADERS
   impl/ResidualQuantizer.h
   impl/ResultHandler.h
   impl/ScalarQuantizer.h
+  impl/TurboQuantizer.h
   impl/expanded_scanners.h
   impl/scalar_quantizer/codecs.h
   impl/scalar_quantizer/distance_computers.h
@@ -417,7 +421,7 @@ endif()
 if(NOT WIN32)
   # Architecture mode to support AVX512 extensions available since Intel(R) Sapphire Rapids.
   # Ref: https://networkbuilders.intel.com/solutionslibrary/intel-avx-512-fp16-instruction-set-for-intel-xeon-processor-based-products-technology-guide
-  target_compile_options(faiss_avx512_spr PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma -mf16c -mavx512f -mavx512cd -mavx512vl -mavx512dq -mavx512bw -mavx512vpopcntdq -mpopcnt -mavx512fp16 -mavx512bf16 ${FAISS_BMI2_FLAGS}>)
+  target_compile_options(faiss_avx512_spr PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-march=sapphirerapids -mtune=sapphirerapids>)
 else()
   target_compile_options(faiss_avx512_spr PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/arch:AVX512>)
   # we need bigobj for the swig wrapper
