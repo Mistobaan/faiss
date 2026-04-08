@@ -58,6 +58,7 @@
 #include <faiss/svs/IndexSVSVamanaLeanVec.h>
 #endif
 #include <faiss/IndexScalarQuantizer.h>
+#include <faiss/IndexTurboQuant.h>
 #include <faiss/MetaIndexes.h>
 #include <faiss/VectorTransform.h>
 
@@ -260,6 +261,28 @@ static void write_ScalarQuantizer(const ScalarQuantizer* ivsc, IOWriter* f) {
     WRITE1(ivsc->d);
     WRITE1(ivsc->code_size);
     WRITEVECTOR(ivsc->trained);
+}
+
+static void write_TurboQuantMSEQuantizer(
+        const TurboQuantMSEQuantizer* tqmse,
+        IOWriter* f) {
+    WRITE1(tqmse->nbits);
+    WRITE1(tqmse->seed);
+    WRITE1(tqmse->store_norm);
+    WRITE1(tqmse->d);
+    WRITE1(tqmse->code_size);
+    WRITEVECTOR(tqmse->centroids);
+}
+
+static void write_TurboQuantProdQuantizer(
+        const TurboQuantProdQuantizer* tqprod,
+        IOWriter* f) {
+    WRITE1(tqprod->nbits);
+    WRITE1(tqprod->seed);
+    WRITE1(tqprod->store_norm);
+    WRITE1(tqprod->d);
+    WRITE1(tqprod->code_size);
+    write_TurboQuantMSEQuantizer(&tqprod->tqmse, f);
 }
 
 void write_InvertedLists(const InvertedLists* ils, IOWriter* f) {
@@ -676,6 +699,22 @@ void write_index(const Index* idx, IOWriter* f, int io_flags) {
         write_index_header(idx, f);
         write_ScalarQuantizer(&idxs->sq, f);
         WRITEVECTOR(idxs->codes);
+    } else if (
+            const IndexTurboQuantMSE* idxtq =
+                    dynamic_cast<const IndexTurboQuantMSE*>(idx)) {
+        uint32_t h = fourcc("IxTM");
+        WRITE1(h);
+        write_index_header(idx, f);
+        write_TurboQuantMSEQuantizer(&idxtq->tqmse, f);
+        WRITEVECTOR(idxtq->codes);
+    } else if (
+            const IndexTurboQuantProd* idxtqprod =
+                    dynamic_cast<const IndexTurboQuantProd*>(idx)) {
+        uint32_t h = fourcc("IxTP");
+        WRITE1(h);
+        write_index_header(idx, f);
+        write_TurboQuantProdQuantizer(&idxtqprod->tqprod, f);
+        WRITEVECTOR(idxtqprod->codes);
     } else if (
             const IndexLattice* idxl_2 =
                     dynamic_cast<const IndexLattice*>(idx)) {

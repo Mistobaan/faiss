@@ -39,6 +39,7 @@ set(FAISS_TEST_SRC
   test_mmap.cpp
   test_zerocopy.cpp
   test_scalar_quantizer.cpp
+  test_turboquant.cpp
   test_factory_tools.cpp
   test_custom_result_handler.cpp
   test_fastscan_filter.cpp
@@ -94,10 +95,6 @@ endif()
 include(../cmake/link_to_faiss_lib.cmake)
 
 link_to_faiss_lib(faiss_test)
-
-if (FAISS_ENABLE_PYTHON)
-  target_link_libraries(faiss_test PUBLIC faiss_example_external_module)
-endif()
 
 include(FetchContent)
 FetchContent_Declare(
