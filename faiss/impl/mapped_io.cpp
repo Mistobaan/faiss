@@ -60,7 +60,9 @@ struct MmappedFileMappingOwner::PImpl {
         void* address = mmap(
                 nullptr, filesize, PROT_READ, MAP_SHARED, fileno(f.get()), 0);
         FAISS_THROW_IF_NOT_FMT(
-                address != MAP_FAILED, "could not mmap(): %s", strerror(errno));
+                address != MAP_FAILED,
+                "could not mmap(): %s",
+                strerror(errno));
 
         // btw, fd can be closed here
 
@@ -83,7 +85,9 @@ struct MmappedFileMappingOwner::PImpl {
         void* address =
                 mmap(nullptr, filesize, PROT_READ, MAP_SHARED, fileno(f), 0);
         FAISS_THROW_IF_NOT_FMT(
-                address != MAP_FAILED, "could not mmap(): %s", strerror(errno));
+                address != MAP_FAILED,
+                "could not mmap(): %s",
+                strerror(errno));
 
         // btw, fd can be closed here
 
