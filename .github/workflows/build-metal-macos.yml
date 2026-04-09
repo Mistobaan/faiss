@@ -91,7 +91,7 @@ jobs:
           CMAKE_PREFIX_PATH: "/opt/homebrew/opt/openblas;/opt/homebrew/opt/libomp"
           MACOSX_DEPLOYMENT_TARGET: "14.0"
         run: |
-          uv build --wheel faiss/python/ \
+          uv build --wheel . \
             --out-dir dist/ \
             -Ccmake.define.FAISS_ENABLE_METAL=ON \
             -Ccmake.define.FAISS_ENABLE_GPU=OFF \
