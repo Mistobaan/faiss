@@ -84,9 +84,6 @@ jobs:
         with:
           version: "latest"
 
-      - name: Install numpy (needed for CMake FindPython NumPy component)
-        run: uv pip install --system numpy
-
       # ── Build wheel (PEP 427 / PEP 425) ────────────────────────────────
       - name: Build faiss-metal wheel
         env:
