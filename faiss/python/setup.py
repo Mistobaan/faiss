@@ -22,6 +22,7 @@ from __future__ import print_function
 import os
 import platform
 import shutil
+import sysconfig
 
 from setuptools import setup
 
@@ -42,10 +43,18 @@ if os.path.exists("py.typed"):
     shutil.copyfile("py.typed", "faiss/py.typed")
 
 # ── locate pre-built SWIG extensions ──────────────────────────────────────
-if platform.system() != "AIX":
-    ext = ".pyd" if platform.system() == "Windows" else ".so"
-else:
+# Use the PEP 3149 compliant extension suffix so the shared object filename
+# matches what Python's import machinery expects, e.g.:
+#   _swigfaiss.cpython-312-darwin.so   (macOS)
+#   _swigfaiss.cpython-312-x86_64-linux-gnu.so   (Linux)
+if platform.system() == "AIX":
     ext = ".a"
+else:
+    # sysconfig.get_config_var('EXT_SUFFIX') returns the full PEP 3149 suffix
+    # including the leading dot, e.g. ".cpython-312-darwin.so" or ".pyd".
+    ext = sysconfig.get_config_var("EXT_SUFFIX") or (
+        ".pyd" if platform.system() == "Windows" else ".so"
+    )
 prefix = "Release/" * (platform.system() == "Windows")
 
 _VARIANTS = {
@@ -64,8 +73,10 @@ for mod_name, lib_path in _VARIANTS.items():
         shutil.copyfile(lib_path, f"faiss/_{mod_name}{ext}")
         found_any = True
 
-# callbacks helper library
-callbacks_lib = f"{prefix}libfaiss_python_callbacks{ext}"
+# callbacks helper library — this is a plain shared lib, not a Python extension,
+# so it keeps the simple .so / .pyd suffix.
+_plain_ext = ".pyd" if platform.system() == "Windows" else ".so"
+callbacks_lib = f"{prefix}libfaiss_python_callbacks{_plain_ext}"
 if os.path.exists(callbacks_lib):
     print(f"Copying {callbacks_lib}")
     shutil.copyfile(callbacks_lib, f"faiss/{callbacks_lib}")

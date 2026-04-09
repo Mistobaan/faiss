@@ -15,6 +15,14 @@ set(CMAKE_CXX_STANDARD 20)
 find_package(SWIG REQUIRED COMPONENTS python)
 include(${SWIG_USE_FILE})
 
+# Find Python early so that Python_SOABI is available for PEP 3149 naming.
+# Development.Module is sufficient for extension modules (provides Python::Module,
+# Python_INCLUDE_DIRS, and Python_SOABI) without requiring the full embedding
+# library (Development.Embed / Python_LIBRARIES).
+find_package(Python REQUIRED
+  COMPONENTS Interpreter Development.Module NumPy
+)
+
 set(UseSWIG_TARGET_NAME_PREFERENCE STANDARD)
 set(SWIG_SOURCE_FILE_EXTENSIONS swig)
 
@@ -190,13 +198,30 @@ if(AIX)
   set_target_properties(swigfaiss PROPERTIES SUFFIX .a)
   set_target_properties(faiss_example_external_module PROPERTIES SUFFIX .a)
 elseif(NOT WIN32)
-  # NOTE: Python does not recognize the dylib extension.
-  set_target_properties(swigfaiss PROPERTIES SUFFIX .so)
-  set_target_properties(swigfaiss_avx2 PROPERTIES SUFFIX .so)
-  set_target_properties(swigfaiss_avx512 PROPERTIES SUFFIX .so)
-  set_target_properties(swigfaiss_avx512_spr PROPERTIES SUFFIX .so)
-  set_target_properties(swigfaiss_sve PROPERTIES SUFFIX .so)
-  set_target_properties(faiss_example_external_module PROPERTIES SUFFIX .so)
+  # PEP 3149 compliant extension suffix, e.g. .cpython-312-darwin.so
+  # This ensures the shared object filename matches what Python's import
+  # machinery expects for C extension modules.
+  if(Python_SOABI)
+    set(_FAISS_EXT_SUFFIX ".${Python_SOABI}.so")
+  else()
+    # Fallback: ask the interpreter for the canonical extension suffix.
+    execute_process(
+      COMMAND "${Python_EXECUTABLE}" -c
+        "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))"
+      OUTPUT_VARIABLE _FAISS_EXT_SUFFIX
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if(NOT _FAISS_EXT_SUFFIX)
+      set(_FAISS_EXT_SUFFIX ".so")
+    endif()
+  endif()
+  message(STATUS "Python extension suffix: ${_FAISS_EXT_SUFFIX}")
+  set_target_properties(swigfaiss PROPERTIES SUFFIX "${_FAISS_EXT_SUFFIX}")
+  set_target_properties(swigfaiss_avx2 PROPERTIES SUFFIX "${_FAISS_EXT_SUFFIX}")
+  set_target_properties(swigfaiss_avx512 PROPERTIES SUFFIX "${_FAISS_EXT_SUFFIX}")
+  set_target_properties(swigfaiss_avx512_spr PROPERTIES SUFFIX "${_FAISS_EXT_SUFFIX}")
+  set_target_properties(swigfaiss_sve PROPERTIES SUFFIX "${_FAISS_EXT_SUFFIX}")
+  set_target_properties(faiss_example_external_module PROPERTIES SUFFIX "${_FAISS_EXT_SUFFIX}")
 else()
   # we need bigobj for the swig wrapper
   target_compile_options(swigfaiss PRIVATE /bigobj)
@@ -296,9 +321,9 @@ target_include_directories(swigfaiss_avx512_spr PRIVATE ${PROJECT_SOURCE_DIR}/..
 target_include_directories(swigfaiss_sve PRIVATE ${PROJECT_SOURCE_DIR}/../..)
 target_include_directories(faiss_example_external_module PRIVATE ${PROJECT_SOURCE_DIR}/../..)
 
-find_package(Python REQUIRED
-  COMPONENTS Development Development.Module NumPy
-)
+# Note: find_package(Python) was already called at the top of this file;
+# the imported targets (Python::Module, Python::NumPy, etc.) and variables
+# (Python_INCLUDE_DIRS, Python_SOABI) are already available.
 
 add_library(faiss_python_callbacks OBJECT
   python_callbacks.cpp
