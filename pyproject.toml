@@ -5,13 +5,13 @@
 
 # ---------------------------------------------------------------------------
 # Build with:
-#   pip install faiss/python/          (from repo root)
-#   uv pip install faiss/python/       (from repo root)
+#   pip install .                       (from repo root)
+#   uv build --wheel .                  (from repo root)
 #
 # Override CMake options at build time:
-#   pip install faiss/python/ -Ccmake.define.FAISS_ENABLE_GPU=ON
-#   pip install faiss/python/ -Ccmake.define.FAISS_ENABLE_METAL=ON
-#   pip install faiss/python/ -Ccmake.define.FAISS_OPT_LEVEL=avx2
+#   pip install . -Ccmake.define.FAISS_ENABLE_GPU=ON
+#   pip install . -Ccmake.define.FAISS_ENABLE_METAL=ON
+#   pip install . -Ccmake.define.FAISS_OPT_LEVEL=avx2
 #
 # The existing cmake → build → python-setup.py install workflow is
 # unaffected; the install() rules below are guarded by SKBUILD.
@@ -62,8 +62,7 @@ Issues = "https://github.com/facebookresearch/faiss/issues"
 # scikit-build-core configuration
 # ---------------------------------------------------------------------------
 [tool.scikit-build]
-# The root CMakeLists.txt is two levels up from this pyproject.toml.
-cmake.source-dir = "../.."
+# CMakeLists.txt lives in the same directory as this pyproject.toml (repo root).
 cmake.build-type = "Release"
 
 # Defaults for a CPU-only wheel.  Override at install time with:
