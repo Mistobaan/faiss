@@ -141,8 +141,9 @@ jobs:
         run: |
           source .venv-test/bin/activate
           uv pip install pytest torch
-          python -X faulthandler -m pytest tests/ -v --timeout=120 || true
-          python -X faulthandler -m unittest discover -v -s faiss/metal/test -p "test_metal_*.py"
+          pytest --junitxml=test-results/pytest/results.xml tests/test_*.py
+          pytest --junitxml=test-results/pytest/results-torch.xml tests/torch_*.py
+          pytest --junitxml=test-results/pytest/results-metal.xml faiss/metal/test/test_metal_*.py
 
   # ── Conda build (validation only, no upload) ────────────────────────
   metal-macos-conda:
