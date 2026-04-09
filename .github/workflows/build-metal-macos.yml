@@ -73,14 +73,19 @@ jobs:
         run: |
           brew install cmake swig libomp openblas
 
-      # ── Python toolchain via uv ─────────────────────────────────────────
+      # ── Python toolchain ────────────────────────────────────────────────
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Set up uv
         uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
 
-      - name: Set up Python 3.12
-        run: uv python install 3.12
+      - name: Install numpy (needed for CMake FindPython NumPy component)
+        run: uv pip install --system numpy
 
       # ── Build wheel (PEP 427 / PEP 425) ────────────────────────────────
       - name: Build faiss-metal wheel
