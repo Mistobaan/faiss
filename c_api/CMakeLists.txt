@@ -37,11 +37,13 @@ set(FAISS_C_SRC
   utils/utils_c.cpp
 )
 
+find_package(OpenMP REQUIRED)
+
 add_library(faiss_c ${FAISS_C_SRC})
-target_link_libraries(faiss_c PRIVATE faiss)
+target_link_libraries(faiss_c PRIVATE faiss OpenMP::OpenMP_CXX)
 
 add_library(faiss_c_avx2 ${FAISS_C_SRC})
-target_link_libraries(faiss_c_avx2 PRIVATE faiss_avx2)
+target_link_libraries(faiss_c_avx2 PRIVATE faiss_avx2 OpenMP::OpenMP_CXX)
 if(NOT FAISS_OPT_LEVEL STREQUAL "avx2" AND NOT FAISS_OPT_LEVEL STREQUAL "avx512" AND NOT FAISS_OPT_LEVEL STREQUAL "avx512_spr")
   set_target_properties(faiss_c_avx2 PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endif()
@@ -56,7 +58,7 @@ else()
 endif()
 
 add_library(faiss_c_avx512 ${FAISS_C_SRC})
-target_link_libraries(faiss_c_avx512 PRIVATE faiss_avx512)
+target_link_libraries(faiss_c_avx512 PRIVATE faiss_avx512 OpenMP::OpenMP_CXX)
 if(NOT FAISS_OPT_LEVEL STREQUAL "avx512")
   set_target_properties(faiss_c_avx512 PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endif()
@@ -69,7 +71,7 @@ else()
 endif()
 
 add_library(faiss_c_avx512_spr ${FAISS_C_SRC})
-target_link_libraries(faiss_c_avx512_spr PRIVATE faiss_avx512_spr)
+target_link_libraries(faiss_c_avx512_spr PRIVATE faiss_avx512_spr OpenMP::OpenMP_CXX)
 if(NOT FAISS_OPT_LEVEL STREQUAL "avx512_spr")
   set_target_properties(faiss_c_avx512_spr PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endif()
@@ -82,7 +84,7 @@ else()
 endif()
 
 add_library(faiss_c_sve ${FAISS_C_SRC})
-target_link_libraries(faiss_c_sve PRIVATE faiss_sve)
+target_link_libraries(faiss_c_sve PRIVATE faiss_sve OpenMP::OpenMP_CXX)
 if(NOT FAISS_OPT_LEVEL STREQUAL "sve")
   set_target_properties(faiss_c_sve PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endif()

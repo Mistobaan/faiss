@@ -327,6 +327,10 @@ namespace std {
 %template(GpuResourcesVector) std::vector<faiss::gpu::GpuResourcesProvider*>;
 #endif
 
+#ifdef METAL_WRAPPER
+%template(MetalResourcesVector) std::vector<faiss::metal::MetalResourcesProvider*>;
+#endif
+
 // produces an error on the Mac
 %ignore faiss::hamming;
 
@@ -481,6 +485,35 @@ void gpu_sync_all_devices()
 
 
 #endif // GPU_WRAPPER
+
+#ifdef METAL_WRAPPER
+
+%shared_ptr(faiss::metal::MetalResources);
+%shared_ptr(faiss::metal::StandardMetalResourcesImpl);
+
+%{
+#include <faiss/metal/MetalResources.h>
+#include <faiss/metal/StandardMetalResources.h>
+#include <faiss/metal/MetalClonerOptions.h>
+#include <faiss/metal/MetalIndex.h>
+#include <faiss/metal/MetalIndexFlat.h>
+#include <faiss/metal/MetalIndexTurboQuant.h>
+#include <faiss/metal/MetalCloner.h>
+%}
+
+%include <faiss/metal/MetalResources.h>
+%include <faiss/metal/StandardMetalResources.h>
+%include <faiss/metal/MetalClonerOptions.h>
+%include <faiss/metal/MetalIndex.h>
+%include <faiss/metal/MetalIndexFlat.h>
+%include <faiss/metal/MetalIndexTurboQuant.h>
+
+%newobject faiss::metal::index_metal_to_cpu;
+%newobject faiss::metal::index_cpu_to_metal;
+
+%include <faiss/metal/MetalCloner.h>
+
+#endif // METAL_WRAPPER
 
 // order matters because includes are not recursive
 
@@ -766,6 +799,12 @@ void gpu_sync_all_devices()
     } else
 %enddef
 
+%define DOWNCAST_METAL(subclass)
+    if (dynamic_cast<faiss::metal::subclass *> ($1)) {
+      $result = SWIG_NewPointerObj($1,SWIGTYPE_p_faiss__metal__ ## subclass,$owner);
+    } else
+%enddef
+
 #endif
 
 %newobject read_index;
@@ -853,6 +892,12 @@ void gpu_sync_all_devices()
     DOWNCAST ( IndexSVSVamanaLVQ )
     DOWNCAST ( IndexSVSVamana )
 #endif // FAISS_ENABLE_SVS
+#ifdef METAL_WRAPPER
+    DOWNCAST_METAL ( MetalIndexTurboQuantMSE )
+    DOWNCAST_METAL ( MetalIndexFlatL2 )
+    DOWNCAST_METAL ( MetalIndexFlatIP )
+    DOWNCAST_METAL ( MetalIndexFlat )
+#endif
 #ifdef GPU_WRAPPER
 #ifdef FAISS_ENABLE_CUVS
     DOWNCAST_GPU ( GpuIndexCagra )
@@ -1009,8 +1054,6 @@ faiss::Quantizer * downcast_Quantizer (faiss::Quantizer *aq)
 %include  <faiss/gpu/GpuCloner.h>
 
 #endif
-
-
 
 /*******************************************************************
  * Support I/O to arbitrary functions
@@ -1350,7 +1393,17 @@ int * cast_integer_to_int_ptr (int64_t x) {
 void * cast_integer_to_void_ptr (int64_t x) {
     return (void*)x;
 }
+
+uint64_t get_index_ptr(faiss::Index* index) {
+    return reinterpret_cast<uint64_t>(index);
+}
+
+faiss::Index* adopt_index_ptr(uint64_t x) {
+    return reinterpret_cast<faiss::Index*>(x);
+}
 %}
+
+%newobject adopt_index_ptr;
 
 %inline %{
 

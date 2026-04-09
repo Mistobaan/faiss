@@ -1,6 +1,10 @@
 name: Conda build
 description: Builds Faiss inside a Conda environment and uploads to repository when label is provided.
 inputs:
+  recipe:
+    description: "Conda recipe directory to build for CPU jobs."
+    default: "faiss"
+    required: false
   label:
     description: "The label to be used for uploads to Conda."
     default: ""
@@ -64,7 +68,7 @@ runs:
       working-directory: conda
       run: |
         conda list --show-channel-urls
-        conda build faiss --python 3.12 -c pytorch
+        conda build ${{ inputs.recipe }} --python 3.12 -c pytorch
     - name: Conda build (CPU) w/ anaconda upload
       if: inputs.label != '' && inputs.cuda == ''
       shell: ${{ steps.choose_shell.outputs.shell }}
@@ -73,7 +77,7 @@ runs:
         PACKAGE_TYPE: ${{ inputs.label }}
       run: |
         conda list --show-channel-urls
-        conda build faiss --python 3.12 --user pytorch --label ${{ inputs.label }} -c pytorch
+        conda build ${{ inputs.recipe }} --python 3.12 --user pytorch --label ${{ inputs.label }} -c pytorch
     - name: Conda build (GPU)
       if: inputs.label == '' && inputs.cuda != '' && inputs.cuvs == ''
       shell: ${{ steps.choose_shell.outputs.shell }}

@@ -1,0 +1,86 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+# ---------------------------------------------------------------------------
+# Build with:
+#   pip install faiss/python/          (from repo root)
+#   uv pip install faiss/python/       (from repo root)
+#
+# Override CMake options at build time:
+#   pip install faiss/python/ -Ccmake.define.FAISS_ENABLE_GPU=ON
+#   pip install faiss/python/ -Ccmake.define.FAISS_ENABLE_METAL=ON
+#   pip install faiss/python/ -Ccmake.define.FAISS_OPT_LEVEL=avx2
+#
+# The existing cmake → build → python-setup.py install workflow is
+# unaffected; the install() rules below are guarded by SKBUILD.
+# ---------------------------------------------------------------------------
+
+[build-system]
+requires = [
+  "scikit-build-core>=0.10",
+  "packaging",
+]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "faiss"
+version = "1.14.1"
+description = "A library for efficient similarity search and clustering of dense vectors"
+readme = {text = """\
+Faiss is a library for efficient similarity search and clustering of dense \
+vectors. It contains algorithms that search in sets of vectors of any size, \
+up to ones that possibly do not fit in RAM. It also contains supporting \
+code for evaluation and parameter tuning. Faiss is written in C++ with \
+complete wrappers for Python/numpy. Some of the most useful algorithms \
+are implemented on the GPU. It is developed by Meta AI Research.\
+""", content-type = "text/plain"}
+license = "MIT"
+requires-python = ">=3.9"
+authors = [
+  {name = "Matthijs Douze, Jeff Johnson, Herve Jegou, Lucas Hosseini", email = "faiss@meta.com"},
+]
+keywords = ["search", "nearest", "neighbors", "similarity"]
+dependencies = ["numpy", "packaging"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: C++",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/facebookresearch/faiss"
+Repository = "https://github.com/facebookresearch/faiss"
+Issues = "https://github.com/facebookresearch/faiss/issues"
+
+# ---------------------------------------------------------------------------
+# scikit-build-core configuration
+# ---------------------------------------------------------------------------
+[tool.scikit-build]
+# The root CMakeLists.txt is two levels up from this pyproject.toml.
+cmake.source-dir = "../.."
+cmake.build-type = "Release"
+
+# Defaults for a CPU-only wheel.  Override at install time with:
+#   -Ccmake.define.FAISS_ENABLE_GPU=ON
+#   -Ccmake.define.FAISS_ENABLE_METAL=ON
+#   -Ccmake.define.FAISS_OPT_LEVEL=avx2
+cmake.define.BUILD_SHARED_LIBS = "ON"
+cmake.define.BUILD_TESTING = "OFF"
+cmake.define.FAISS_ENABLE_GPU = "OFF"
+cmake.define.FAISS_ENABLE_PYTHON = "ON"
+cmake.define.FAISS_ENABLE_EXTRAS = "OFF"
+
+# Only install the "python" component into the wheel.
+# This keeps headers, cmake configs, etc. out of the wheel
+# while the existing system install rules remain untouched.
+install.components = ["python"]
+
+# All Python files are installed via CMake install() rules,
+# not auto-discovered from the source tree.
+wheel.packages = []

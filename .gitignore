@@ -31,3 +31,7 @@ faiss/python/swigfaiss_sve.swig
 # Python package build outputs
 /dist/
 /*.egg-info/
+/build-conda/
+/benchs/sift1M/
+/build-*
+/.cache
