@@ -544,6 +544,10 @@ if(FAISS_ENABLE_SVS)
   target_compile_definitions(faiss_sve PRIVATE FAISS_ENABLE_SVS FAISS_SVS_RUNTIME_VERSION=${FAISS_SVS_RUNTIME_VERSION})
 endif()
 
+if(FAISS_ENABLE_METAL)
+  target_compile_definitions(faiss PRIVATE FAISS_ENABLE_METAL)
+endif()
+
 if(WIN32)
   set_target_properties(faiss PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
 endif()
