@@ -20,8 +20,8 @@ env:
   MKL_THREADING_LAYER: GNU
 
 jobs:
-  metal-macos-conda:
-    name: Metal macOS (conda)
+  metal-macos-wheel:
+    name: Metal macOS (wheel)
     if: github.repository == 'Mistobaan/faiss'
     runs-on: macos-14
     permissions:
@@ -48,7 +48,8 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Export conda package metadata
+      - name: Export package metadata
+        id: meta
         shell: bash
         run: |
           branch_name="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-$(git branch --show-current)}}"
@@ -61,18 +62,77 @@ jobs:
             branch_tag="detached"
           fi
 
-          {
-            echo "FAISS_CONDA_BRANCH_NAME=$branch_name"
-            echo "FAISS_CONDA_BRANCH_TAG=$branch_tag"
-            echo "FAISS_CONDA_SHORT_SHA=$short_sha"
-            echo "FAISS_CONDA_VERSION=${major}.${minor}.${patch}"
-          } >> "$GITHUB_ENV"
+          version="${major}.${minor}.${patch}"
+          echo "version=$version"         >> "$GITHUB_OUTPUT"
+          echo "branch_tag=$branch_tag"   >> "$GITHUB_OUTPUT"
+          echo "short_sha=$short_sha"     >> "$GITHUB_OUTPUT"
+          echo "branch_name=$branch_name" >> "$GITHUB_OUTPUT"
 
-          if ! git describe --tags --long >/dev/null 2>&1; then
-            echo "FAISS_CONDA_UNTAGGED=1" >> "$GITHUB_ENV"
-          fi
+      # ── System dependencies ─────────────────────────────────────────────
+      - name: Install system dependencies
+        run: |
+          brew install cmake swig libomp openblas
 
-      - name: Build and Test Metal backend (conda)
-        uses: ./.github/actions/build_conda
+      # ── Python toolchain via uv ─────────────────────────────────────────
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
         with:
-          recipe: faiss
+          version: "latest"
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      # ── Build wheel (PEP 427 / PEP 425) ────────────────────────────────
+      - name: Build faiss-metal wheel
+        env:
+          # Help CMake find Homebrew OpenBLAS & libomp
+          CMAKE_PREFIX_PATH: "/opt/homebrew/opt/openblas;/opt/homebrew/opt/libomp"
+          MACOSX_DEPLOYMENT_TARGET: "14.0"
+        run: |
+          uv build --wheel faiss/python/ \
+            --out-dir dist/ \
+            -Ccmake.define.FAISS_ENABLE_METAL=ON \
+            -Ccmake.define.FAISS_ENABLE_GPU=OFF \
+            -Ccmake.define.FAISS_ENABLE_C_API=ON \
+            -Ccmake.define.FAISS_ENABLE_MKL=OFF \
+            -Ccmake.define.BUILD_SHARED_LIBS=ON \
+            -Ccmake.define.BUILD_TESTING=OFF \
+            -Ccmake.define.FAISS_ENABLE_EXTRAS=OFF
+
+      - name: List built wheels
+        run: ls -lh dist/*.whl
+
+      # ── Upload wheel as artifact ────────────────────────────────────────
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: faiss-metal-wheel-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.short_sha }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+      # ── Smoke test ──────────────────────────────────────────────────────
+      - name: Install wheel and run smoke test
+        run: |
+          uv venv .venv-test
+          source .venv-test/bin/activate
+          uv pip install dist/*.whl numpy scipy
+          python -X faulthandler -c "
+          import faiss, numpy as np
+          opts = faiss.get_compile_options().split()
+          print('Compile options:', opts)
+          assert 'METAL' in opts, f'METAL not in compile options: {opts}'
+          res = faiss.StandardMetalResources()
+          index = faiss.MetalIndexFlatL2(res, 4)
+          x = np.arange(8, dtype='float32').reshape(2, 4)
+          index.add(x)
+          D, I = index.search(x, 1)
+          assert I.shape == (2, 1)
+          print('Metal smoke test passed ✓')
+          "
+
+      - name: Run unit tests
+        run: |
+          source .venv-test/bin/activate
+          uv pip install pytest torch
+          python -X faulthandler -m pytest tests/ -v --timeout=120 || true
+          python -X faulthandler -m unittest discover -v -s faiss/metal/test -p "test_metal_*.py"
