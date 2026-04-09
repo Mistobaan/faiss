@@ -14,9 +14,9 @@ class MetalTurboQuantizer {
    public:
     MetalTurboQuantizer(
             std::shared_ptr<MetalResources> resources,
-            const faiss::TurboQuantizer& quantizer);
+            const faiss::TurboQuantMSEQuantizer& quantizer);
 
-    void update(const faiss::TurboQuantizer& quantizer);
+    void update(const faiss::TurboQuantMSEQuantizer& quantizer);
 
     void computeCodes(const float* x, uint8_t* codes, size_t n) const;
     void decode(const uint8_t* codes, float* x, size_t n) const;

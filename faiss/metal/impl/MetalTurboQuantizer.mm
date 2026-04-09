@@ -33,13 +33,13 @@ struct ScaleArgs {
 
 MetalTurboQuantizer::MetalTurboQuantizer(
         std::shared_ptr<MetalResources> resources,
-        const faiss::TurboQuantizer& quantizer)
+        const faiss::TurboQuantMSEQuantizer& quantizer)
         : resources_(std::move(resources)),
           impl_(resources_->getImplShared()) {
     update(quantizer);
 }
 
-void MetalTurboQuantizer::update(const faiss::TurboQuantizer& quantizer) {
+void MetalTurboQuantizer::update(const faiss::TurboQuantMSEQuantizer& quantizer) {
     d_ = quantizer.d;
     nbits_ = quantizer.nbits;
     store_norm_ = quantizer.store_norm;

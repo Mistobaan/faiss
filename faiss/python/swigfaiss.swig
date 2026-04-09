@@ -488,9 +488,6 @@ void gpu_sync_all_devices()
 
 #ifdef METAL_WRAPPER
 
-%shared_ptr(faiss::metal::MetalResources);
-%shared_ptr(faiss::metal::StandardMetalResourcesImpl);
-
 %{
 #include <faiss/metal/MetalResources.h>
 #include <faiss/metal/StandardMetalResources.h>
@@ -500,18 +497,6 @@ void gpu_sync_all_devices()
 #include <faiss/metal/MetalIndexTurboQuant.h>
 #include <faiss/metal/MetalCloner.h>
 %}
-
-%include <faiss/metal/MetalResources.h>
-%include <faiss/metal/StandardMetalResources.h>
-%include <faiss/metal/MetalClonerOptions.h>
-%include <faiss/metal/MetalIndex.h>
-%include <faiss/metal/MetalIndexFlat.h>
-%include <faiss/metal/MetalIndexTurboQuant.h>
-
-%newobject faiss::metal::index_metal_to_cpu;
-%newobject faiss::metal::index_cpu_to_metal;
-
-%include <faiss/metal/MetalCloner.h>
 
 #endif // METAL_WRAPPER
 
@@ -744,6 +729,25 @@ void gpu_sync_all_devices()
 %include  <faiss/svs/IndexSVSVamanaLVQ.h>
 %include  <faiss/svs/IndexSVSVamanaLeanVec.h>
 #endif // FAISS_ENABLE_SVS
+
+#ifdef METAL_WRAPPER
+
+%shared_ptr(faiss::metal::MetalResources);
+%shared_ptr(faiss::metal::StandardMetalResourcesImpl);
+
+%include <faiss/metal/MetalResources.h>
+%include <faiss/metal/StandardMetalResources.h>
+%include <faiss/metal/MetalClonerOptions.h>
+%include <faiss/metal/MetalIndex.h>
+%include <faiss/metal/MetalIndexFlat.h>
+%include <faiss/metal/MetalIndexTurboQuant.h>
+
+%newobject faiss::metal::index_metal_to_cpu;
+%newobject faiss::metal::index_cpu_to_metal;
+
+%include <faiss/metal/MetalCloner.h>
+
+#endif // METAL_WRAPPER
 
 #ifdef GPU_WRAPPER
 

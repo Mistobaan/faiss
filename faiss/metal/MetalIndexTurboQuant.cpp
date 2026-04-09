@@ -37,7 +37,7 @@ MetalIndexTurboQuantMSE::MetalIndexTurboQuantMSE(
                   index->metric_type,
                   index->metric_arg,
                   config),
-          tq_(index->tq) {
+          tq_(index->tqmse) {
     validate_metric(index->metric_type);
     is_trained = index->is_trained;
     copyFrom(index);
@@ -81,7 +81,7 @@ MetalIndexTurboQuantMSE::~MetalIndexTurboQuantMSE() = default;
 
 void MetalIndexTurboQuantMSE::copyFrom(const faiss::IndexTurboQuantMSE* index) {
     MetalIndex::copyFrom(index);
-    tq_ = index->tq;
+    tq_ = index->tqmse;
     is_trained = index->is_trained;
     codes_.assign(index->codes.data(), index->codes.data() + index->codes.size());
     resetIndex_();
@@ -91,7 +91,7 @@ void MetalIndexTurboQuantMSE::copyFrom(const faiss::IndexTurboQuantMSE* index) {
 
 void MetalIndexTurboQuantMSE::copyTo(faiss::IndexTurboQuantMSE* index) const {
     MetalIndex::copyTo(index);
-    index->tq = tq_;
+    index->tqmse = tq_;
     index->code_size = tq_.code_size;
     index->codes = faiss::MaybeOwnedVector<uint8_t>(codes_);
 }
