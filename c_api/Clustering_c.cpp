@@ -61,8 +61,11 @@ void faiss_ClusteringParameters_init(FaissClusteringParameters* params) {
     params->decode_block_size = d.decode_block_size;
 }
 
-// This conversion is required because the two types are not memory-compatible
-inline ClusteringParameters from_faiss_c(
+} // extern "C"
+
+// This conversion is required because the two types are not memory-compatible.
+// Defined outside extern "C" because it returns a C++ user-defined type.
+static inline ClusteringParameters from_faiss_c(
         const FaissClusteringParameters* params) {
     ClusteringParameters o;
     o.frozen_centroids = params->frozen_centroids;
@@ -78,6 +81,8 @@ inline ClusteringParameters from_faiss_c(
     o.decode_block_size = params->decode_block_size;
     return o;
 }
+
+extern "C" {
 
 /// getter for centroids (size = k * d)
 void faiss_Clustering_centroids(
