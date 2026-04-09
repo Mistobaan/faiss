@@ -85,7 +85,14 @@ float fvec_Linf<SL>(const float* x, const float* y, size_t d) {
     float res = 0;
     FAISS_PRAGMA_IMPRECISE_LOOP
     for (size_t i = 0; i < d; i++) {
-        res = fmax(res, fabs(x[i] - y[i]));
+        // Use a plain ternary instead of fmax() so the auto-vectorizer
+        // can lower this to SIMD max instructions (vmaxq_f32 on NEON,
+        // vmaxps on AVX).  fmax() has IEEE 754 NaN-propagation semantics
+        // that prevent the compiler from using the faster SIMD path.
+        // This function is already wrapped in FAISS_PRAGMA_IMPRECISE_*
+        // so relaxed FP semantics are acceptable.
+        float a = fabsf(x[i] - y[i]);
+        res = (a > res) ? a : res;
     }
     return res;
 }
