@@ -76,7 +76,7 @@ class MetalIndexTurboQuantMSE : public MetalIndex {
     void appendCodes_(const uint8_t* codes, idx_t n);
     void rebuildDecodedStorage_();
 
-    faiss::TurboQuantizer tq_;
+    faiss::TurboQuantMSEQuantizer tq_;
     std::vector<uint8_t> codes_;
     std::unique_ptr<impl::MetalFlatIndex> data_;
     std::unique_ptr<impl::MetalTurboQuantizer> codec_;
