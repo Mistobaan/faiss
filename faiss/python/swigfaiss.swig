@@ -746,10 +746,11 @@ void gpu_sync_all_devices()
 %include <faiss/metal/MetalIndexFlat.h>
 %include <faiss/metal/MetalIndexTurboQuant.h>
 
-%newobject faiss::metal::index_metal_to_cpu;
-%newobject faiss::metal::index_cpu_to_metal;
-
-%include <faiss/metal/MetalCloner.h>
+// NOTE: MetalCloner.h (%newobject + %include) is intentionally placed AFTER
+// the %typemap(out) faiss::Index * block below.  SWIG applies output typemaps
+// only to declarations processed after the typemap definition, so the cloner
+// functions must be declared after the downcast typemap for DOWNCAST_METAL to
+// take effect.  (See AGENTS.md for details.)
 
 #endif // METAL_WRAPPER
 
@@ -1051,6 +1052,14 @@ faiss::Quantizer * downcast_Quantizer (faiss::Quantizer *aq)
 %include  <faiss/index_factory.h>
 %include  <faiss/MatrixStats.h>
 
+#ifdef METAL_WRAPPER
+
+%newobject faiss::metal::index_metal_to_cpu;
+%newobject faiss::metal::index_cpu_to_metal;
+
+%include <faiss/metal/MetalCloner.h>
+
+#endif // METAL_WRAPPER
 
 #ifdef GPU_WRAPPER
 
