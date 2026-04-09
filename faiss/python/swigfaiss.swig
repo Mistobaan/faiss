@@ -730,6 +730,10 @@ void gpu_sync_all_devices()
 %include  <faiss/svs/IndexSVSVamanaLeanVec.h>
 #endif // FAISS_ENABLE_SVS
 
+// clone_index.h must be parsed before MetalCloner.h so that SWIG sees
+// the faiss::Cloner base-class definition.
+%include  <faiss/clone_index.h>
+
 #ifdef METAL_WRAPPER
 
 %shared_ptr(faiss::metal::MetalResources);
@@ -1038,7 +1042,7 @@ faiss::Quantizer * downcast_Quantizer (faiss::Quantizer *aq)
 %ignore faiss::read_InvertedLists_up;
 
 %include  <faiss/index_io.h>
-%include  <faiss/clone_index.h>
+// clone_index.h already %included earlier (before MetalCloner.h).
 %newobject index_factory;
 %newobject index_binary_factory;
 

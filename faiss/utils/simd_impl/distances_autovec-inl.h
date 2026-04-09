@@ -83,7 +83,11 @@ FAISS_PRAGMA_IMPRECISE_FUNCTION_BEGIN
 template <>
 float fvec_Linf<SL>(const float* x, const float* y, size_t d) {
     float res = 0;
-    FAISS_PRAGMA_IMPRECISE_LOOP
+    // Note: no FAISS_PRAGMA_IMPRECISE_LOOP here — the max-reduction pattern
+    // (res = max(res, fabsf(…))) cannot be auto-vectorized by Clang, and the
+    // pragma would only trigger -Wpass-failed warnings.  The surrounding
+    // FAISS_PRAGMA_IMPRECISE_FUNCTION_BEGIN/END already provides the
+    // float-precision relaxation we need.
     for (size_t i = 0; i < d; i++) {
         // Use a plain ternary instead of fmax() so the auto-vectorizer
         // can lower this to SIMD max instructions (vmaxq_f32 on NEON,
