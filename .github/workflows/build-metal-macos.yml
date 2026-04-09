@@ -143,3 +143,60 @@ jobs:
           uv pip install pytest torch
           python -X faulthandler -m pytest tests/ -v --timeout=120 || true
           python -X faulthandler -m unittest discover -v -s faiss/metal/test -p "test_metal_*.py"
+
+  # ── Conda build (validation only, no upload) ────────────────────────
+  metal-macos-conda:
+    name: Metal macOS (conda)
+    needs: metal-macos-wheel
+    if: github.repository == 'Mistobaan/faiss'
+    runs-on: macos-14
+    permissions:
+      contents: read
+    concurrency:
+      group: metal-macos-conda-${{ github.event_name == 'push' && github.ref || github.event_name == 'workflow_dispatch' && inputs.ref || 'metal' }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout push ref
+        if: github.event_name == 'push'
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Checkout Mistobaan metal branch
+        if: github.event_name != 'push'
+        uses: actions/checkout@v6
+        with:
+          repository: Mistobaan/faiss
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || 'metal' }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Export conda package metadata
+        shell: bash
+        run: |
+          branch_name="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-$(git branch --show-current)}}"
+          short_sha="$(git rev-parse --short HEAD)"
+          branch_tag="$(printf '%s' "$branch_name" | tr -c 'A-Za-z0-9_.-' '_' | sed -E 's/^_+//; s/_+$//')"
+          major="$(awk '/^#define FAISS_VERSION_MAJOR / { print $3 }' faiss/Index.h)"
+          minor="$(awk '/^#define FAISS_VERSION_MINOR / { print $3 }' faiss/Index.h)"
+          patch="$(awk '/^#define FAISS_VERSION_PATCH / { print $3 }' faiss/Index.h)"
+          if [ -z "$branch_tag" ]; then
+            branch_tag="detached"
+          fi
+
+          {
+            echo "FAISS_CONDA_BRANCH_NAME=$branch_name"
+            echo "FAISS_CONDA_BRANCH_TAG=$branch_tag"
+            echo "FAISS_CONDA_SHORT_SHA=$short_sha"
+            echo "FAISS_CONDA_VERSION=${major}.${minor}.${patch}"
+          } >> "$GITHUB_ENV"
+
+          if ! git describe --tags --long >/dev/null 2>&1; then
+            echo "FAISS_CONDA_UNTAGGED=1" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build Metal backend (conda, no upload)
+        uses: ./.github/actions/build_conda
+        with:
+          recipe: faiss
