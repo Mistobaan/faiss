@@ -33,13 +33,7 @@ source:
 
 outputs:
   - name: libfaiss
-    script: >-
-      /bin/bash -ec 'JOBS="${CPU_COUNT:-$(sysctl -n hw.ncpu 2>/dev/null || echo 1)}";
-      cmake -B _build -DBUILD_SHARED_LIBS=ON -DFAISS_ENABLE_C_API=ON -DBUILD_TESTING=OFF -DFAISS_ENABLE_GPU=OFF -DFAISS_ENABLE_METAL=ON -DFAISS_ENABLE_PYTHON=OFF -DFAISS_ENABLE_EXTRAS=OFF -DFETCHCONTENT_UPDATES_DISCONNECTED=ON -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=Release .;
-      cmake --build _build --target faiss faiss_c -j "${JOBS}";
-      cmake --install _build --prefix "$PREFIX";
-      cmake --install _build --prefix _libfaiss_stage/'
-      # [osx and arm64]
+    script: build-lib-osx-arm64.sh  # [osx and arm64]
     script: build-lib.sh  # [x86_64 and not win and not osx]
     script: build-lib-osx.sh  # [x86_64 and osx]
     script: build-lib-arm64.sh  # [not x86_64 and not osx]
@@ -112,12 +106,7 @@ outputs:
         - conda inspect objects -p $PREFIX $PKG_NAME   # [osx]
 
   - name: faiss-cpu
-    script: >-
-      /bin/bash -ec 'export FAISS_CONDA_SPLIT_INSTALL=1;
-      export FAISS_CONDA_STAGED_PREFIX=_libfaiss_stage;
-      export FAISS_PYTHON_ENABLE_METAL=1;
-      "$PYTHON" -m pip install . --no-deps --no-build-isolation --ignore-installed'
-      # [osx and arm64]
+    script: build-pkg-osx-arm64.sh  # [osx and arm64]
     script: build-pkg.sh  # [x86_64 and not win and not osx]
     script: build-pkg-osx.sh  # [x86_64 and osx]
     script: build-pkg-arm64.sh # [not x86_64 and not osx]
