@@ -98,7 +98,7 @@ jobs:
             -Ccmake.define.BUILD_SHARED_LIBS=ON \
             -Ccmake.define.BUILD_TESTING=OFF \
             -Ccmake.define.FAISS_ENABLE_EXTRAS=OFF \
-            -Ccmake.define.OpenMP_CXX_FLAGS="-Xclang -fopenmp -I/opt/homebrew/opt/libomp/include" \
+            -Ccmake.define.OpenMP_CXX_FLAGS="-Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include" \
             -Ccmake.define.OpenMP_CXX_LIB_NAMES="omp" \
             -Ccmake.define.OpenMP_omp_LIBRARY="/opt/homebrew/opt/libomp/lib/libomp.dylib"
 
