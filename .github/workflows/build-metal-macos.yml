@@ -85,7 +85,7 @@ jobs:
       # ── Build wheel (PEP 427 / PEP 425) ────────────────────────────────
       - name: Build faiss-metal wheel
         env:
-          # Help CMake find Homebrew OpenBLAS & libomp
+          # Help CMake find Homebrew OpenBLAS
           CMAKE_PREFIX_PATH: "/opt/homebrew/opt/openblas;/opt/homebrew/opt/libomp"
           MACOSX_DEPLOYMENT_TARGET: "14.0"
         run: |
@@ -97,7 +97,10 @@ jobs:
             -Ccmake.define.FAISS_ENABLE_MKL=OFF \
             -Ccmake.define.BUILD_SHARED_LIBS=ON \
             -Ccmake.define.BUILD_TESTING=OFF \
-            -Ccmake.define.FAISS_ENABLE_EXTRAS=OFF
+            -Ccmake.define.FAISS_ENABLE_EXTRAS=OFF \
+            -Ccmake.define.OpenMP_CXX_FLAGS="-Xclang -fopenmp -I/opt/homebrew/opt/libomp/include" \
+            -Ccmake.define.OpenMP_CXX_LIB_NAMES="omp" \
+            -Ccmake.define.OpenMP_omp_LIBRARY="/opt/homebrew/opt/libomp/lib/libomp.dylib"
 
       - name: List built wheels
         run: ls -lh dist/*.whl
