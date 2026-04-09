@@ -58,6 +58,11 @@ macro(configure_swigfaiss source)
       )
     endif()
   endif()
+  if(FAISS_ENABLE_METAL)
+    set_property(SOURCE ${source} APPEND PROPERTY
+      COMPILE_DEFINITIONS METAL_WRAPPER
+    )
+  endif()
 endmacro()
 
 # CMake's SWIG wrappers only allow tweaking certain settings at source level, so
@@ -292,32 +297,33 @@ target_include_directories(swigfaiss_sve PRIVATE ${PROJECT_SOURCE_DIR}/../..)
 target_include_directories(faiss_example_external_module PRIVATE ${PROJECT_SOURCE_DIR}/../..)
 
 find_package(Python REQUIRED
-  COMPONENTS Development.Module NumPy
+  COMPONENTS Development Development.Module NumPy
 )
 
-add_library(faiss_python_callbacks STATIC EXCLUDE_FROM_ALL
+add_library(faiss_python_callbacks OBJECT
   python_callbacks.cpp
 )
 set_property(TARGET faiss_python_callbacks
   PROPERTY POSITION_INDEPENDENT_CODE ON
 )
 
-if ("${CMAKE_SYSTEM_NAME}" MATCHES "AIX")
-target_link_libraries(faiss_python_callbacks PRIVATE faiss)
-endif()
-
 # Hack so that python_callbacks.h can be included as
 # `#include <faiss/python/python_callbacks.h>`.
 target_include_directories(faiss_python_callbacks PRIVATE ${PROJECT_SOURCE_DIR}/../..)
 target_include_directories(faiss_python_callbacks PRIVATE ${Python_INCLUDE_DIRS})
 
-target_link_libraries(swigfaiss PRIVATE faiss_python_callbacks)
-target_link_libraries(swigfaiss_avx2 PRIVATE faiss_python_callbacks)
-target_link_libraries(swigfaiss_avx512 PRIVATE faiss_python_callbacks)
-target_link_libraries(swigfaiss_avx512_spr PRIVATE faiss_python_callbacks)
-target_link_libraries(swigfaiss_sve PRIVATE faiss_python_callbacks)
-target_link_libraries(faiss_example_external_module PRIVATE faiss_python_callbacks)
+target_sources(swigfaiss PRIVATE $<TARGET_OBJECTS:faiss_python_callbacks>)
+target_sources(swigfaiss_avx2 PRIVATE $<TARGET_OBJECTS:faiss_python_callbacks>)
+target_sources(swigfaiss_avx512 PRIVATE $<TARGET_OBJECTS:faiss_python_callbacks>)
+target_sources(swigfaiss_avx512_spr PRIVATE $<TARGET_OBJECTS:faiss_python_callbacks>)
+target_sources(swigfaiss_sve PRIVATE $<TARGET_OBJECTS:faiss_python_callbacks>)
+target_sources(faiss_example_external_module PRIVATE $<TARGET_OBJECTS:faiss_python_callbacks>)
 
+# ============================================================================
+# Legacy file staging (cmake --build && cd build/faiss/python && python setup.py install)
+# These configure_file / file(COPY) rules are used by the classic workflow.
+# They are harmless when scikit-build-core drives the build.
+# ============================================================================
 configure_file(setup.py setup.py COPYONLY)
 configure_file(__init__.py __init__.py COPYONLY)
 configure_file(loader.py loader.py COPYONLY)
@@ -325,6 +331,150 @@ configure_file(class_wrappers.py class_wrappers.py COPYONLY)
 configure_file(gpu_wrappers.py gpu_wrappers.py COPYONLY)
 configure_file(extra_wrappers.py extra_wrappers.py COPYONLY)
 configure_file(array_conversions.py array_conversions.py COPYONLY)
+configure_file(__init__.pyi __init__.pyi COPYONLY)
+configure_file(py.typed py.typed COPYONLY)
 
 # file(GLOB files "${PROJECT_SOURCE_DIR}/../../contrib/*.py")
 file(COPY ${PROJECT_SOURCE_DIR}/../../contrib  DESTINATION .)
+
+# ============================================================================
+# Install rules for scikit-build-core (pip install / uv pip install)
+#
+# SKBUILD is set by scikit-build-core.  These rules are skipped during
+# plain cmake workflows so the existing build/install path is unchanged.
+#
+# All rules use COMPONENT python so that pyproject.toml's
+# install.components = ["python"] keeps headers/cmake-configs out of the wheel.
+# ============================================================================
+if(SKBUILD)
+  set(_FAISS_PKG "faiss")
+  set(_FAISS_LIB "faiss/lib")
+
+  # -- Python source files ---------------------------------------------------
+  install(FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/__init__.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/__init__.pyi
+    ${CMAKE_CURRENT_SOURCE_DIR}/py.typed
+    ${CMAKE_CURRENT_SOURCE_DIR}/loader.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/class_wrappers.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/gpu_wrappers.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/extra_wrappers.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/array_conversions.py
+    DESTINATION ${_FAISS_PKG}
+    COMPONENT python
+  )
+
+  # -- contrib package -------------------------------------------------------
+  install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../contrib/
+    DESTINATION ${_FAISS_PKG}/contrib
+    COMPONENT python
+    FILES_MATCHING
+      PATTERN "*.py"
+      PATTERN "__pycache__" EXCLUDE
+  )
+
+  # -- SWIG-generated Python wrapper (generic) -------------------------------
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/swigfaiss.py
+    DESTINATION ${_FAISS_PKG}
+    COMPONENT python
+  )
+
+  # -- SWIG native extension (generic) --------------------------------------
+  install(TARGETS swigfaiss
+    LIBRARY DESTINATION ${_FAISS_PKG} COMPONENT python
+    RUNTIME DESTINATION ${_FAISS_PKG} COMPONENT python   # Windows .pyd
+  )
+
+  # -- libfaiss shared library (bundled for self-contained wheels) -----------
+  # For final wheel repair use delocate-wheel (macOS) or auditwheel (Linux).
+  if(TARGET faiss AND BUILD_SHARED_LIBS)
+    install(TARGETS faiss
+      LIBRARY DESTINATION ${_FAISS_LIB} COMPONENT python
+      RUNTIME DESTINATION ${_FAISS_LIB} COMPONENT python
+    )
+  endif()
+
+  # -- RPATH so _swigfaiss finds libfaiss at runtime -------------------------
+  if(APPLE)
+    set_target_properties(swigfaiss PROPERTIES INSTALL_RPATH "@loader_path/lib")
+  elseif(UNIX)
+    set_target_properties(swigfaiss PROPERTIES INSTALL_RPATH "$ORIGIN/lib")
+  endif()
+
+  # -- AVX2 variant (built when FAISS_OPT_LEVEL ∈ {avx2, avx512, avx512_spr})
+  if(FAISS_OPT_LEVEL STREQUAL "avx2" OR FAISS_OPT_LEVEL STREQUAL "avx512" OR FAISS_OPT_LEVEL STREQUAL "avx512_spr")
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/swigfaiss_avx2.py
+      DESTINATION ${_FAISS_PKG} COMPONENT python)
+    install(TARGETS swigfaiss_avx2
+      LIBRARY DESTINATION ${_FAISS_PKG} COMPONENT python
+      RUNTIME DESTINATION ${_FAISS_PKG} COMPONENT python)
+    if(TARGET faiss_avx2)
+      install(TARGETS faiss_avx2
+        LIBRARY DESTINATION ${_FAISS_LIB} COMPONENT python
+        RUNTIME DESTINATION ${_FAISS_LIB} COMPONENT python)
+    endif()
+    if(APPLE)
+      set_target_properties(swigfaiss_avx2 PROPERTIES INSTALL_RPATH "@loader_path/lib")
+    elseif(UNIX)
+      set_target_properties(swigfaiss_avx2 PROPERTIES INSTALL_RPATH "$ORIGIN/lib")
+    endif()
+  endif()
+
+  # -- AVX512 variant (built when FAISS_OPT_LEVEL = avx512) -----------------
+  if(FAISS_OPT_LEVEL STREQUAL "avx512")
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/swigfaiss_avx512.py
+      DESTINATION ${_FAISS_PKG} COMPONENT python)
+    install(TARGETS swigfaiss_avx512
+      LIBRARY DESTINATION ${_FAISS_PKG} COMPONENT python
+      RUNTIME DESTINATION ${_FAISS_PKG} COMPONENT python)
+    if(TARGET faiss_avx512)
+      install(TARGETS faiss_avx512
+        LIBRARY DESTINATION ${_FAISS_LIB} COMPONENT python
+        RUNTIME DESTINATION ${_FAISS_LIB} COMPONENT python)
+    endif()
+    if(APPLE)
+      set_target_properties(swigfaiss_avx512 PROPERTIES INSTALL_RPATH "@loader_path/lib")
+    elseif(UNIX)
+      set_target_properties(swigfaiss_avx512 PROPERTIES INSTALL_RPATH "$ORIGIN/lib")
+    endif()
+  endif()
+
+  # -- AVX512-SPR variant (built when FAISS_OPT_LEVEL = avx512_spr) ---------
+  if(FAISS_OPT_LEVEL STREQUAL "avx512_spr")
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/swigfaiss_avx512_spr.py
+      DESTINATION ${_FAISS_PKG} COMPONENT python)
+    install(TARGETS swigfaiss_avx512_spr
+      LIBRARY DESTINATION ${_FAISS_PKG} COMPONENT python
+      RUNTIME DESTINATION ${_FAISS_PKG} COMPONENT python)
+    if(TARGET faiss_avx512_spr)
+      install(TARGETS faiss_avx512_spr
+        LIBRARY DESTINATION ${_FAISS_LIB} COMPONENT python
+        RUNTIME DESTINATION ${_FAISS_LIB} COMPONENT python)
+    endif()
+    if(APPLE)
+      set_target_properties(swigfaiss_avx512_spr PROPERTIES INSTALL_RPATH "@loader_path/lib")
+    elseif(UNIX)
+      set_target_properties(swigfaiss_avx512_spr PROPERTIES INSTALL_RPATH "$ORIGIN/lib")
+    endif()
+  endif()
+
+  # -- SVE variant (built when FAISS_OPT_LEVEL = sve) -----------------------
+  if(FAISS_OPT_LEVEL STREQUAL "sve")
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/swigfaiss_sve.py
+      DESTINATION ${_FAISS_PKG} COMPONENT python)
+    install(TARGETS swigfaiss_sve
+      LIBRARY DESTINATION ${_FAISS_PKG} COMPONENT python
+      RUNTIME DESTINATION ${_FAISS_PKG} COMPONENT python)
+    if(TARGET faiss_sve)
+      install(TARGETS faiss_sve
+        LIBRARY DESTINATION ${_FAISS_LIB} COMPONENT python
+        RUNTIME DESTINATION ${_FAISS_LIB} COMPONENT python)
+    endif()
+    if(APPLE)
+      set_target_properties(swigfaiss_sve PROPERTIES INSTALL_RPATH "@loader_path/lib")
+    elseif(UNIX)
+      set_target_properties(swigfaiss_sve PROPERTIES INSTALL_RPATH "$ORIGIN/lib")
+    endif()
+  endif()
+
+endif() # SKBUILD

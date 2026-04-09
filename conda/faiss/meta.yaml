@@ -3,9 +3,16 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-{% set version = environ.get('GIT_DESCRIBE_TAG').lstrip('v') %}
+{% set describe_tag = environ.get('GIT_DESCRIBE_TAG', '') %}
+{% set version = describe_tag.lstrip('v') if describe_tag else environ.get('FAISS_CONDA_VERSION', '1.14.1') %}
 {% set suffix = "_nightly" if environ.get('PACKAGE_TYPE') == 'nightly' else "" %}
-{% set number = GIT_DESCRIBE_NUMBER %}
+{% set number = environ.get('GIT_DESCRIBE_NUMBER', 0) %}
+{% set untagged_suffix = '' %}
+{% if environ.get('FAISS_CONDA_UNTAGGED', '') == '1' %}
+{% set branch_tag = environ.get('FAISS_CONDA_BRANCH_TAG', 'untagged') %}
+{% set short_sha = environ.get('FAISS_CONDA_SHORT_SHA', 'unknown') %}
+{% set untagged_suffix = '_' ~ branch_tag ~ '_' ~ short_sha %}
+{% endif %}
 
 package:
   name: faiss-pkg
@@ -26,12 +33,20 @@ source:
 
 outputs:
   - name: libfaiss
+    script: >-
+      /bin/bash -ec 'JOBS="${CPU_COUNT:-$(sysctl -n hw.ncpu 2>/dev/null || echo 1)}";
+      cmake -B _build -DBUILD_SHARED_LIBS=ON -DFAISS_ENABLE_C_API=ON -DBUILD_TESTING=OFF -DFAISS_ENABLE_GPU=OFF -DFAISS_ENABLE_METAL=ON -DFAISS_ENABLE_PYTHON=OFF -DFAISS_ENABLE_EXTRAS=OFF -DFETCHCONTENT_UPDATES_DISCONNECTED=ON -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=Release .;
+      cmake --build _build --target faiss faiss_c -j "${JOBS}";
+      cmake --install _build --prefix "$PREFIX";
+      cmake --install _build --prefix _libfaiss_stage/'
+      # [osx and arm64]
     script: build-lib.sh  # [x86_64 and not win and not osx]
     script: build-lib-osx.sh  # [x86_64 and osx]
-    script: build-lib-arm64.sh  # [not x86_64]
+    script: build-lib-arm64.sh  # [not x86_64 and not osx]
     script: build-lib.bat  # [win]
     build:
-      string: "py{{ PY_VER }}_h{{ PKG_HASH }}_{{ number }}_cpu{{ suffix }}"
+      string: "py{{ PY_VER }}_h{{ PKG_HASH }}_{{ number }}_metal{{ suffix }}{{ untagged_suffix }}"  # [osx and arm64]
+      string: "py{{ PY_VER }}_h{{ PKG_HASH }}_{{ number }}_cpu{{ suffix }}"  # [not (osx and arm64)]
       run_exports:
         - {{ pin_compatible('libfaiss', exact=True) }}
     requirements:
@@ -91,16 +106,25 @@ outputs:
       commands:
         - test -f $PREFIX/lib/libfaiss$SHLIB_EXT       # [not win]
         - test -f $PREFIX/lib/libfaiss_avx2$SHLIB_EXT  # [x86_64 and not win]
+        - nm -gU $PREFIX/lib/libfaiss$SHLIB_EXT | grep faiss_metal_runtime_available  # [osx and arm64]
+        - test ! -f $PREFIX/lib/libfaiss_metal$SHLIB_EXT  # [osx and arm64]
         - conda inspect linkages -p $PREFIX $PKG_NAME  # [not win]
         - conda inspect objects -p $PREFIX $PKG_NAME   # [osx]
 
   - name: faiss-cpu
+    script: >-
+      /bin/bash -ec 'export FAISS_CONDA_SPLIT_INSTALL=1;
+      export FAISS_CONDA_STAGED_PREFIX=_libfaiss_stage;
+      export FAISS_PYTHON_ENABLE_METAL=1;
+      "$PYTHON" -m pip install . --no-deps --no-build-isolation --ignore-installed'
+      # [osx and arm64]
     script: build-pkg.sh  # [x86_64 and not win and not osx]
     script: build-pkg-osx.sh  # [x86_64 and osx]
-    script: build-pkg-arm64.sh # [not x86_64]
+    script: build-pkg-arm64.sh # [not x86_64 and not osx]
     script: build-pkg.bat  # [win]
     build:
-      string: "py{{ PY_VER }}_h{{ PKG_HASH }}_{{ number }}_cpu{{ suffix }}"
+      string: "py{{ PY_VER }}_h{{ PKG_HASH }}_{{ number }}_metal{{ suffix }}{{ untagged_suffix }}"  # [osx and arm64]
+      string: "py{{ PY_VER }}_h{{ PKG_HASH }}_{{ number }}_cpu{{ suffix }}"  # [not (osx and arm64)]
     requirements:
       build:
         - python {{ python }}
@@ -124,7 +148,11 @@ outputs:
       host:
         - python {{ python }}
         - numpy >=2.0,<3.0
-        - setuptools
+        - pip  # [osx and arm64]
+        - packaging  # [osx and arm64]
+        - setuptools >=80  # [osx and arm64]
+        - setuptools  # [not (osx and arm64)]
+        - wheel  # [osx and arm64]
         - {{ pin_subpackage('libfaiss', exact=True) }}
         - libcxx =20.1.1  # [osx and arm64]
         - _openmp_mutex =4.5=2_kmp_llvm  # [x86_64 and not win]
@@ -140,7 +168,6 @@ outputs:
       run:
         - python {{ python }}
         - numpy >=2.0,<3.0
-        - packaging
         - {{ pin_subpackage('libfaiss', exact=True) }}
         - libcxx =20.1.1  # [osx and arm64]
         {% if PY_VER == '3.10' or PY_VER == '3.11' %}
@@ -168,8 +195,11 @@ outputs:
       commands:
         - python -X faulthandler -m unittest discover -v -s tests/ -p "test_*"
         - python -X faulthandler -m unittest discover -v -s tests/ -p "torch_*"
+        - python -X faulthandler -m unittest discover -v -s faiss/metal/test -p "test_metal_*.py"  # [osx and arm64]
+        - python -X faulthandler -c "import faiss, numpy as np; assert 'METAL' in faiss.get_compile_options().split(); res = faiss.StandardMetalResources(); index = faiss.MetalIndexFlatL2(res, 4); x = np.arange(8, dtype='float32').reshape(2, 4); index.add(x); D, I = index.search(x, 1); assert I.shape == (2, 1)"  # [osx and arm64]
         - sh test_cpu_dispatch.sh  # [linux64]
       files:
         - test_cpu_dispatch.sh  # [linux64]
       source_files:
         - tests/
+        - faiss/metal/test/  # [osx and arm64]

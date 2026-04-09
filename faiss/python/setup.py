@@ -3,6 +3,20 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+"""
+Legacy setup.py — kept for the classic CMake workflow:
+
+    cmake -S . -B build ...
+    cmake --build build --target faiss swigfaiss
+    cd build/faiss/python && python setup.py install
+
+For modern installs prefer:
+
+    pip install faiss/python/
+    uv pip install faiss/python/
+
+which are handled entirely by pyproject.toml + scikit-build-core.
+"""
 from __future__ import print_function
 
 import os
@@ -11,7 +25,7 @@ import shutil
 
 from setuptools import setup
 
-# make the faiss python package dir
+# ── assemble the faiss Python package from pre-built artefacts ────────────
 shutil.rmtree("faiss", ignore_errors=True)
 os.mkdir("faiss")
 shutil.copytree("contrib", "faiss/contrib")
@@ -27,96 +41,63 @@ if os.path.exists("__init__.pyi"):
 if os.path.exists("py.typed"):
     shutil.copyfile("py.typed", "faiss/py.typed")
 
+# ── locate pre-built SWIG extensions ──────────────────────────────────────
 if platform.system() != "AIX":
     ext = ".pyd" if platform.system() == "Windows" else ".so"
 else:
     ext = ".a"
 prefix = "Release/" * (platform.system() == "Windows")
 
-swigfaiss_generic_lib = f"{prefix}_swigfaiss{ext}"
-swigfaiss_avx2_lib = f"{prefix}_swigfaiss_avx2{ext}"
-swigfaiss_avx512_lib = f"{prefix}_swigfaiss_avx512{ext}"
-swigfaiss_avx512_spr_lib = f"{prefix}_swigfaiss_avx512_spr{ext}"
+_VARIANTS = {
+    "swigfaiss":             f"{prefix}_swigfaiss{ext}",
+    "swigfaiss_avx2":        f"{prefix}_swigfaiss_avx2{ext}",
+    "swigfaiss_avx512":      f"{prefix}_swigfaiss_avx512{ext}",
+    "swigfaiss_avx512_spr":  f"{prefix}_swigfaiss_avx512_spr{ext}",
+    "swigfaiss_sve":         f"{prefix}_swigfaiss_sve{ext}",
+}
+
+found_any = False
+for mod_name, lib_path in _VARIANTS.items():
+    if os.path.exists(lib_path):
+        print(f"Copying {lib_path}")
+        shutil.copyfile(f"{mod_name}.py", f"faiss/{mod_name}.py")
+        shutil.copyfile(lib_path, f"faiss/_{mod_name}{ext}")
+        found_any = True
+
+# callbacks helper library
 callbacks_lib = f"{prefix}libfaiss_python_callbacks{ext}"
-swigfaiss_sve_lib = f"{prefix}_swigfaiss_sve{ext}"
-faiss_example_external_module_lib = f"_faiss_example_external_module{ext}"
-
-found_swigfaiss_generic = os.path.exists(swigfaiss_generic_lib)
-found_swigfaiss_avx2 = os.path.exists(swigfaiss_avx2_lib)
-found_swigfaiss_avx512 = os.path.exists(swigfaiss_avx512_lib)
-found_swigfaiss_avx512_spr = os.path.exists(swigfaiss_avx512_spr_lib)
-found_callbacks = os.path.exists(callbacks_lib)
-found_swigfaiss_sve = os.path.exists(swigfaiss_sve_lib)
-found_faiss_example_external_module_lib = os.path.exists(
-    faiss_example_external_module_lib
-)
-
-if platform.system() != "AIX":
-    assert (
-        found_swigfaiss_generic
-        or found_swigfaiss_avx2
-        or found_swigfaiss_avx512
-        or found_swigfaiss_avx512_spr
-        or found_swigfaiss_sve
-        or found_faiss_example_external_module_lib
-    ), (
-        f"Could not find {swigfaiss_generic_lib} or "
-        f"{swigfaiss_avx2_lib} or {swigfaiss_avx512_lib} or {swigfaiss_avx512_spr_lib} or {swigfaiss_sve_lib} or {faiss_example_external_module_lib}. "
-        f"Faiss may not be compiled yet."
-    )
-
-if found_swigfaiss_generic:
-    print(f"Copying {swigfaiss_generic_lib}")
-    shutil.copyfile("swigfaiss.py", "faiss/swigfaiss.py")
-    shutil.copyfile(swigfaiss_generic_lib, f"faiss/_swigfaiss{ext}")
-
-if found_swigfaiss_avx2:
-    print(f"Copying {swigfaiss_avx2_lib}")
-    shutil.copyfile("swigfaiss_avx2.py", "faiss/swigfaiss_avx2.py")
-    shutil.copyfile(swigfaiss_avx2_lib, f"faiss/_swigfaiss_avx2{ext}")
-
-if found_swigfaiss_avx512:
-    print(f"Copying {swigfaiss_avx512_lib}")
-    shutil.copyfile("swigfaiss_avx512.py", "faiss/swigfaiss_avx512.py")
-    shutil.copyfile(swigfaiss_avx512_lib, f"faiss/_swigfaiss_avx512{ext}")
-
-if found_swigfaiss_avx512_spr:
-    print(f"Copying {swigfaiss_avx512_spr_lib}")
-    shutil.copyfile("swigfaiss_avx512_spr.py", "faiss/swigfaiss_avx512_spr.py")
-    shutil.copyfile(swigfaiss_avx512_spr_lib, f"faiss/_swigfaiss_avx512_spr{ext}")
-
-if found_callbacks:
+if os.path.exists(callbacks_lib):
     print(f"Copying {callbacks_lib}")
     shutil.copyfile(callbacks_lib, f"faiss/{callbacks_lib}")
 
-if found_swigfaiss_sve:
-    print(f"Copying {swigfaiss_sve_lib}")
-    shutil.copyfile("swigfaiss_sve.py", "faiss/swigfaiss_sve.py")
-    shutil.copyfile(swigfaiss_sve_lib, f"faiss/_swigfaiss_sve{ext}")
+# example external module
+example_lib = f"_faiss_example_external_module{ext}"
+if os.path.exists(example_lib):
+    print(f"Copying {example_lib}")
+    shutil.copyfile("faiss_example_external_module.py",
+                     "faiss/faiss_example_external_module.py")
+    shutil.copyfile(example_lib, f"faiss/{example_lib}")
+    found_any = True
 
-if found_faiss_example_external_module_lib:
-    print(f"Copying {faiss_example_external_module_lib}")
-    shutil.copyfile(
-        "faiss_example_external_module.py", "faiss/faiss_example_external_module.py"
-    )
-    shutil.copyfile(
-        faiss_example_external_module_lib,
-        f"faiss/_faiss_example_external_module{ext}",
+if platform.system() != "AIX":
+    assert found_any, (
+        f"Could not find any SWIG extension ({', '.join(_VARIANTS.values())}). "
+        f"Faiss may not be compiled yet."
     )
 
-long_description = """
-Faiss is a library for efficient similarity search and clustering of dense
-vectors. It contains algorithms that search in sets of vectors of any size,
-up to ones that possibly do not fit in RAM. It also contains supporting
-code for evaluation and parameter tuning. Faiss is written in C++ with
-complete wrappers for Python/numpy. Some of the most useful algorithms
-are implemented on the GPU. It is developed by Facebook AI Research.
-"""
+# ── setuptools metadata ──────────────────────────────────────────────────
 setup(
     name="faiss",
     version="1.14.1",
     description="A library for efficient similarity search and clustering of dense vectors",
-    long_description=long_description,
+    long_description=(
+        "Faiss is a library for efficient similarity search and clustering of dense "
+        "vectors. It contains algorithms that search in sets of vectors of any size, "
+        "up to ones that possibly do not fit in RAM. It also contains supporting "
+        "code for evaluation and parameter tuning. Faiss is written in C++ with "
+        "complete wrappers for Python/numpy. Some of the most useful algorithms "
+        "are implemented on the GPU. It is developed by Meta AI Research."
+    ),
     long_description_content_type="text/plain",
     url="https://github.com/facebookresearch/faiss",
     author="Matthijs Douze, Jeff Johnson, Herve Jegou, Lucas Hosseini",
