@@ -3,12 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+# Import Faiss before torch to avoid dual-libomp initialization on macOS.
+import faiss  # usort: skip
 import torch  # usort: skip
 from torch import nn  # usort: skip
 import unittest  # usort: skip
 import numpy as np  # usort: skip
-
-import faiss  # usort: skip
 
 from faiss.contrib import datasets  # usort: skip
 from faiss.contrib.inspect_tools import get_additive_quantizer_codebooks  # usort: skip

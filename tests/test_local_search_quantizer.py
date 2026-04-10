@@ -190,10 +190,12 @@ class TestComponents(unittest.TestCase):
         nbits = 4
 
         lsq = faiss.LocalSearchQuantizer(ds.d, M, nbits)
+        lsq.train_iters = 50
         lsq.train(xt)
         err_double = eval_codec(lsq, xb)
 
         lsq = faiss.LocalSearchQuantizer(ds.d, M, nbits)
+        lsq.train_iters = 50
         lsq.update_codebooks_with_double = False
         lsq.train(xt)
         err_float = eval_codec(lsq, xb)

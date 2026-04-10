@@ -156,12 +156,20 @@ The base wheel keeps the existing SWIG-backed Python extension:
 - `faiss/_swigfaiss.<PEP 3149 suffix>`
 - `faiss/_metal.py`
 - `faiss/lib/libfaiss.dylib`
+- `faiss/lib/libomp.dylib` (vendored fallback for the repaired macOS wheel)
 
 This wheel is CPython ABI-specific because `_swigfaiss` is a real CPython
 extension module that links against the Python C API.
 
 On `osx-arm64`, the base package includes the Metal backend by default. There
 is no separate `faiss-metal` artifact in the current packaging model.
+
+To avoid loading two different LLVM OpenMP runtimes in one process, the Metal
+wheel is repaired after build time so both `faiss/_swigfaiss` and
+`faiss/lib/libfaiss.dylib` depend on `@rpath/libomp.dylib` instead of a
+Homebrew absolute path. The repaired wheel searches `torch/lib` first so it
+reuses PyTorch's bundled runtime when available, then falls back to the
+vendored `faiss/lib/libomp.dylib` for standalone installs.
 
 ### Platform Tags
 
@@ -241,30 +249,30 @@ cmake --build build -j "$JOBS" --target faiss swigfaiss faiss_test faiss_metal_t
 ctest --test-dir build --output-on-failure -R TestMetal
 ```
 
-### Wheel Build
+### CI-Style Wheel Build And Test
+
+Use the same repo script that the macOS Metal workflow calls:
 
 ```bash
-python setup.py bdist_wheel -d dist/base
+./scripts/ci/run-metal-wheel-osx-arm64.sh
 ```
 
-### `uv` Install Flow
+That flow installs the Homebrew dependencies, builds the Metal wheel into
+`dist/`, repairs the wheel's OpenMP load commands, creates `.venv-test`, runs
+the installed-wheel smoke test, and then executes:
 
-```bash
-uv venv --python "$PYTHON_BIN" /tmp/faiss-uv
-uv pip install --python /tmp/faiss-uv/bin/python dist/base/*.whl
-```
+- `tests/test_*.py`
+- `tests/torch_*.py`
+- `faiss/metal/test/test_metal_*.py`
 
-### Metal Python Tests Against Installed Wheels
+You can also run the individual steps directly:
 
-Copy the tests out of the source tree so the import path resolves to the
-installed wheels instead of the local checkout.
+- `./scripts/ci/install-metal-deps-osx-arm64.sh`
+- `./scripts/ci/build-metal-wheel-osx-arm64.sh`
+- `./scripts/ci/test-metal-wheel-osx-arm64.sh`
 
-```bash
-tmpdir=$(mktemp -d /tmp/faiss-wheel-pytests.XXXXXX)
-cp faiss/metal/test/test_metal_*.py "$tmpdir"/
-cd "$tmpdir"
-/tmp/faiss-uv/bin/python -m pytest -q test_metal_*.py
-```
+`DIST_DIR` and `VENV_DIR` may be overridden when you want alternate output or
+virtualenv locations.
 
 ## Implementation Notes
 

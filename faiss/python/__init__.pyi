@@ -1335,6 +1335,8 @@ class ScalarQuantizer(Quantizer):
     QT_6bit: int
     QT_bf16: int
     QT_8bit_direct_signed: int
+    QT_tqmse_4bit: int
+    QT_tqmse_8bit: int
 
     # RangeStat constants (as class attributes)
     RS_minmax: int

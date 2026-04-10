@@ -348,6 +348,18 @@ class TestQuantizerClone(unittest.TestCase):
         np.testing.assert_array_equal(codes, codes2)
 
 
+class TestTurboQuantMSESQFactory(unittest.TestCase):
+
+    def test_factory_tqmse(self):
+        index4 = faiss.index_factory(32, "SQtqmse4")
+        self.assertEqual(index4.__class__, faiss.IndexScalarQuantizer)
+        self.assertEqual(index4.sq.qtype, faiss.ScalarQuantizer.QT_tqmse_4bit)
+
+        index8 = faiss.index_factory(32, "SQtqmse8")
+        self.assertEqual(index8.__class__, faiss.IndexScalarQuantizer)
+        self.assertEqual(index8.sq.qtype, faiss.ScalarQuantizer.QT_tqmse_8bit)
+
+
 class TestIVFSpectralHashOwnership(unittest.TestCase):
 
     def test_constructor(self):

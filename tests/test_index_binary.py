@@ -5,13 +5,15 @@
 
 """this is a basic test script for simple indices work"""
 
-import os
 import numpy as np
 import unittest
 import faiss
 
 from common_faiss_tests import (
-    compare_binary_result_lists, for_all_simd_levels, make_binary_dataset
+    compare_binary_result_lists,
+    for_all_simd_levels,
+    macos_has_old_broken_libomp,
+    make_binary_dataset,
 )
 
 
@@ -369,8 +371,10 @@ class TestHNSW(unittest.TestCase):
 @for_all_simd_levels
 class TestReplicasAndShards(unittest.TestCase):
 
-    @unittest.skipIf(os.name == "posix" and os.uname().sysname == "Darwin",
-                     "There is a bug in the OpenMP implementation on OSX.")
+    @unittest.skipIf(
+        macos_has_old_broken_libomp(),
+        "There is a bug in older libomp implementations on macOS.",
+    )
     def test_replicas(self):
         d = 32
         nq = 100

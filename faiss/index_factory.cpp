@@ -154,9 +154,11 @@ std::map<std::string, ScalarQuantizer::QuantizerType> sq_types = {
         {"SQbf16", ScalarQuantizer::QT_bf16},
         {"SQ8_direct_signed", ScalarQuantizer::QT_8bit_direct_signed},
         {"SQ8_direct", ScalarQuantizer::QT_8bit_direct},
+        {"SQtqmse4", ScalarQuantizer::QT_tqmse_4bit},
+        {"SQtqmse8", ScalarQuantizer::QT_tqmse_8bit},
 };
 const std::string sq_pattern =
-        "(SQ4|SQ8|SQ6|SQfp16|SQbf16|SQ8_direct_signed|SQ8_direct)";
+        "(SQ4|SQ8|SQ6|SQfp16|SQbf16|SQ8_direct_signed|SQ8_direct|SQtqmse4|SQtqmse8)";
 
 std::map<std::string, AdditiveQuantizer::Search_type_t> aq_search_type = {
         {"_Nfloat", AdditiveQuantizer::ST_norm_float},

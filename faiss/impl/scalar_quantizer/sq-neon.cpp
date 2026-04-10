@@ -140,6 +140,35 @@ struct QuantizerTemplate<
     }
 };
 
+template <int NBITS>
+struct QuantizerTemplate<
+        CodecTurboQuantMSE<NBITS, SIMDLevel::ARM_NEON>,
+        scalar_quantizer::QuantizerTemplateScaling::NON_UNIFORM,
+        SIMDLevel::ARM_NEON>
+        : QuantizerTemplate<
+                  CodecTurboQuantMSE<NBITS, SIMDLevel::ARM_NEON>,
+                  scalar_quantizer::QuantizerTemplateScaling::NON_UNIFORM,
+                  SIMDLevel::NONE> {
+    QuantizerTemplate(size_t d, const std::vector<float>& trained)
+            : QuantizerTemplate<
+                      CodecTurboQuantMSE<NBITS, SIMDLevel::ARM_NEON>,
+                      scalar_quantizer::QuantizerTemplateScaling::NON_UNIFORM,
+                      SIMDLevel::NONE>(d, trained) {
+        assert(d % 8 == 0);
+    }
+
+    FAISS_ALWAYS_INLINE simd8float32
+    reconstruct_8_components(const uint8_t* code, int i) const {
+        float tmp[8];
+        for (int j = 0; j < 8; j++) {
+            tmp[j] = this->centroids
+                    [CodecTurboQuantMSE<NBITS, SIMDLevel::ARM_NEON>::decode_index(
+                            code, i + j)];
+        }
+        return simd8float32(tmp);
+    }
+};
+
 /**********************************************************
  * FP16 Quantizer
  **********************************************************/

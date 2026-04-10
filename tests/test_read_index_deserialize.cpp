@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstring>
 #include <numeric>
+#include <tuple>
 #include <vector>
 
 #include <faiss/Index.h>
@@ -3049,6 +3050,53 @@ TEST(ReadIndexDeserialize, SQUntrainedEmptyTrainedAccepted) {
     reader.data = buf;
     auto idx = read_index_up(&reader);
     EXPECT_FALSE(idx->is_trained);
+}
+
+TEST(ReadIndexDeserialize, SQTQMSETrainedSizesAccepted) {
+    for (auto [qtype, code_size, trained_size] : {
+                 std::tuple<int, size_t, size_t>{
+                         ScalarQuantizer::QT_tqmse_4bit, 2, 31},
+                 std::tuple<int, size_t, size_t>{
+                         ScalarQuantizer::QT_tqmse_8bit, 4, 511},
+         }) {
+        std::vector<uint8_t> buf;
+        push_fourcc(buf, "IxSQ");
+        push_index_header(buf, /*d=*/4, /*ntotal=*/0);
+        push_val<int>(buf, qtype);
+        push_val<int>(buf, 0);      // rangestat
+        push_val<float>(buf, 0.0f); // rangestat_arg
+        push_val<size_t>(buf, 4);   // d
+        push_val<size_t>(buf, code_size);
+        push_vector<float>(buf, std::vector<float>(trained_size, 0.0f));
+        push_vector<uint8_t>(buf, {}); // codes (ntotal=0)
+
+        VectorIOReader reader;
+        reader.data = buf;
+        auto idx = read_index_up(&reader);
+        EXPECT_TRUE(idx->is_trained);
+    }
+}
+
+TEST(ReadIndexDeserialize, SQTQMSETrainedSizeMismatch) {
+    for (auto [qtype, code_size, trained_size] : {
+                 std::tuple<int, size_t, size_t>{
+                         ScalarQuantizer::QT_tqmse_4bit, 2, 30},
+                 std::tuple<int, size_t, size_t>{
+                         ScalarQuantizer::QT_tqmse_8bit, 4, 510},
+         }) {
+        std::vector<uint8_t> buf;
+        push_fourcc(buf, "IxSQ");
+        push_index_header(buf, /*d=*/4, /*ntotal=*/0);
+        push_val<int>(buf, qtype);
+        push_val<int>(buf, 0);      // rangestat
+        push_val<float>(buf, 0.0f); // rangestat_arg
+        push_val<size_t>(buf, 4);   // d
+        push_val<size_t>(buf, code_size);
+        push_vector<float>(buf, std::vector<float>(trained_size, 0.0f));
+        push_vector<uint8_t>(buf, {}); // codes (ntotal=0)
+
+        expect_read_throws_with(buf, "ScalarQuantizer trained size");
+    }
 }
 
 // Test: IndexResidualQuantizer rejects AQ dimension != index dimension.

@@ -124,6 +124,7 @@ IndexRefine* clone_IndexRefine(const IndexRefine* ir) {
     TRYCLONE(IndexRefine, ir) {
         FAISS_THROW_MSG("clone not supported for this type of IndexRefine");
     }
+    return nullptr;
 }
 
 IndexIDMap* clone_IndexIDMap(const IndexIDMap* im) {
@@ -131,6 +132,7 @@ IndexIDMap* clone_IndexIDMap(const IndexIDMap* im) {
     TRYCLONE(IndexIDMap, im) {
         FAISS_THROW_MSG("clone not supported for this type of IndexIDMap");
     }
+    return nullptr;
 }
 
 IndexHNSW* clone_IndexHNSW(const IndexHNSW* ihnsw) {
@@ -142,6 +144,7 @@ IndexHNSW* clone_IndexHNSW(const IndexHNSW* ihnsw) {
     TRYCLONE(IndexHNSW, ihnsw) {
         FAISS_THROW_MSG("clone not supported for this type of IndexHNSW");
     }
+    return nullptr;
 }
 
 IndexBinaryHNSW* clone_IndexBinaryHNSW(const IndexBinaryHNSW* ihnsw) {
@@ -154,6 +157,7 @@ IndexNNDescent* clone_IndexNNDescent(const IndexNNDescent* innd) {
     TRYCLONE(IndexNNDescent, innd) {
         FAISS_THROW_MSG("clone not supported for this type of IndexNNDescent");
     }
+    return nullptr;
 }
 
 IndexNSG* clone_IndexNSG(const IndexNSG* insg) {
@@ -163,6 +167,7 @@ IndexNSG* clone_IndexNSG(const IndexNSG* insg) {
     TRYCLONE(IndexNSG, insg) {
         FAISS_THROW_MSG("clone not supported for this type of IndexNSG");
     }
+    return nullptr;
 }
 
 IndexRowwiseMinMaxBase* clone_IndexRowwiseMinMax(
@@ -172,6 +177,7 @@ IndexRowwiseMinMaxBase* clone_IndexRowwiseMinMax(
         FAISS_THROW_MSG(
                 "clone not supported for this type of IndexRowwiseMinMax");
     }
+    return nullptr;
 }
 
 #define TRYCAST(classname, var) auto* var = dynamic_cast<classname*>(index)
@@ -252,6 +258,7 @@ Index* clone_AdditiveQuantizerIndex(const Index* index) {
         FAISS_THROW_MSG(
                 "clone not supported for this type of additive quantizer index");
     }
+    return nullptr;
 }
 
 namespace {
@@ -380,6 +387,7 @@ Index* Cloner::clone_Index(const Index* index) {
         IndexRowwiseMinMaxBase* res = clone_IndexRowwiseMinMax(irmmb);
         res->own_fields = true;
         res->index = clone_Index(irmmb->index);
+        return res;
     } else if (
             dynamic_cast<const IndexAdditiveQuantizerFastScan*>(index) ||
             dynamic_cast<const IndexAdditiveQuantizer*>(index) ||

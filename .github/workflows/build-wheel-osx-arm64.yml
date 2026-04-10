@@ -11,8 +11,6 @@ on:
         required: false
         default: metal
         type: string
-  schedule:
-    - cron: "0 6 * * 0"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -21,13 +19,29 @@ env:
 
 jobs:
   metal-macos-wheel:
-    name: Metal macOS (wheel)
+    name: Metal macOS (wheel, ${{ matrix.macos_target }})
     if: github.repository == 'Mistobaan/faiss'
-    runs-on: macos-14
+    runs-on: ${{ matrix.runs_on }}
     permissions:
       contents: read
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runs_on: macos-14
+            macos_target: "14.0"
+            artifact_suffix: macosx_14_0_arm64
+          - runs_on: macos-15
+            macos_target: "15.0"
+            artifact_suffix: macosx_15_0_arm64
+    env:
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_target }}
     concurrency:
-      group: metal-macos-${{ github.event_name == 'push' && github.ref || github.event_name == 'workflow_dispatch' && inputs.ref || 'metal' }}
+      group: metal-macos-${{ matrix.artifact_suffix }}-${{ github.event_name == 'push' && github.ref || github.event_name == 'workflow_dispatch' && inputs.ref || 'metal' }}
       cancel-in-progress: true
     steps:
       - name: Checkout push ref
@@ -70,8 +84,7 @@ jobs:
 
       # ── System dependencies ─────────────────────────────────────────────
       - name: Install system dependencies
-        run: |
-          brew install cmake swig libomp openblas
+        run: scripts/ci/install-metal-deps-osx-arm64.sh
 
       # ── Python toolchain ────────────────────────────────────────────────
       - name: Set up Python 3.12
@@ -86,64 +99,27 @@ jobs:
 
       # ── Build wheel (PEP 427 / PEP 425) ────────────────────────────────
       - name: Build faiss-metal wheel
-        env:
-          # Help CMake find Homebrew OpenBLAS
-          CMAKE_PREFIX_PATH: "/opt/homebrew/opt/openblas;/opt/homebrew/opt/libomp"
-          MACOSX_DEPLOYMENT_TARGET: "14.0"
-        run: |
-          uv build --wheel . \
-            --out-dir dist/ \
-            -Ccmake.define.FAISS_ENABLE_METAL=ON \
-            -Ccmake.define.FAISS_ENABLE_GPU=OFF \
-            -Ccmake.define.FAISS_ENABLE_C_API=ON \
-            -Ccmake.define.FAISS_ENABLE_MKL=OFF \
-            -Ccmake.define.BUILD_SHARED_LIBS=ON \
-            -Ccmake.define.BUILD_TESTING=OFF \
-            -Ccmake.define.FAISS_ENABLE_EXTRAS=OFF \
-            -Ccmake.define.OpenMP_C_FLAGS="-Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include" \
-            -Ccmake.define.OpenMP_C_LIB_NAMES="omp" \
-            -Ccmake.define.OpenMP_CXX_FLAGS="-Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include" \
-            -Ccmake.define.OpenMP_CXX_LIB_NAMES="omp" \
-            -Ccmake.define.OpenMP_omp_LIBRARY="/opt/homebrew/opt/libomp/lib/libomp.dylib"
-
-      - name: List built wheels
-        run: ls -lh dist/*.whl
+        run: scripts/ci/build-metal-wheel-osx-arm64.sh
 
       # ── Upload wheel as artifact ────────────────────────────────────────
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: faiss-metal-wheel-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.short_sha }}
+          name: faiss-metal-wheel-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.short_sha }}-${{ matrix.artifact_suffix }}
           path: dist/*.whl
           if-no-files-found: error
 
-      # ── Smoke test ──────────────────────────────────────────────────────
-      - name: Install wheel and run smoke test
-        run: |
-          uv venv .venv-test
-          source .venv-test/bin/activate
-          uv pip install dist/*.whl numpy scipy
-          python -X faulthandler -c "
-          import faiss, numpy as np
-          opts = faiss.get_compile_options().split()
-          print('Compile options:', opts)
-          assert 'METAL' in opts, f'METAL not in compile options: {opts}'
-          res = faiss.StandardMetalResources()
-          index = faiss.MetalIndexFlatL2(res, 4)
-          x = np.arange(8, dtype='float32').reshape(2, 4)
-          index.add(x)
-          D, I = index.search(x, 1)
-          assert I.shape == (2, 1)
-          print('Metal smoke test passed ✓')
-          "
+      # ── Smoke test / Python tests ──────────────────────────────────────
+      - name: Run wheel smoke test and unit tests
+        run: scripts/ci/test-metal-wheel-osx-arm64.sh
 
-      - name: Run unit tests
-        run: |
-          source .venv-test/bin/activate
-          uv pip install pytest torch
-          pytest --junitxml=test-results/pytest/results.xml tests/test_*.py
-          pytest --junitxml=test-results/pytest/results-torch.xml tests/torch_*.py
-          pytest --junitxml=test-results/pytest/results-metal.xml faiss/metal/test/test_metal_*.py
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: faiss-metal-test-results-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.short_sha }}-${{ matrix.artifact_suffix }}
+          path: test-results
+          if-no-files-found: warn
 
   # ── Conda build (validation only, no upload) ────────────────────────
   metal-macos-conda:
@@ -153,6 +129,10 @@ jobs:
     runs-on: macos-14
     permissions:
       contents: read
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
     concurrency:
       group: metal-macos-conda-${{ github.event_name == 'push' && github.ref || github.event_name == 'workflow_dispatch' && inputs.ref || 'metal' }}
       cancel-in-progress: true

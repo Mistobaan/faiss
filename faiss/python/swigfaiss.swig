@@ -732,7 +732,9 @@ void gpu_sync_all_devices()
 
 // clone_index.h must be parsed before MetalCloner.h so that SWIG sees
 // the faiss::Cloner base-class definition.
-%include  <faiss/clone_index.h>
+// (Moved to after the downcast typemaps so that functions returning
+// faiss::Index * are correctly downcast in Python.)
+
 
 #ifdef METAL_WRAPPER
 
@@ -866,14 +868,14 @@ void gpu_sync_all_devices()
     DOWNCAST ( IndexPQ )
     DOWNCAST ( IndexResidualQuantizer )
     DOWNCAST ( IndexLocalSearchQuantizer )
+    DOWNCAST ( IndexProductResidualQuantizer )
+    DOWNCAST ( IndexProductLocalSearchQuantizer )
     DOWNCAST ( IndexResidualQuantizerFastScan )
     DOWNCAST ( IndexLocalSearchQuantizerFastScan )
     DOWNCAST ( IndexProductResidualQuantizerFastScan )
     DOWNCAST ( IndexProductLocalSearchQuantizerFastScan )
     DOWNCAST ( ResidualCoarseQuantizer )
     DOWNCAST ( LocalSearchCoarseQuantizer )
-    DOWNCAST ( IndexProductResidualQuantizer )
-    DOWNCAST ( IndexProductLocalSearchQuantizer )
     DOWNCAST ( IndexScalarQuantizer )
     DOWNCAST ( IndexTurboQuantMSE )
     DOWNCAST ( IndexTurboQuantProd )
@@ -891,6 +893,7 @@ void gpu_sync_all_devices()
     DOWNCAST ( IndexNSGFlat )
     DOWNCAST ( IndexNSGPQ )
     DOWNCAST ( IndexNSGSQ )
+    DOWNCAST ( IndexNSG )
     DOWNCAST ( Index2Layer )
     DOWNCAST ( IndexRandom )
     DOWNCAST ( IndexRowwiseMinMax )
@@ -1042,6 +1045,7 @@ faiss::Quantizer * downcast_Quantizer (faiss::Quantizer *aq)
 %ignore faiss::read_ProductQuantizer_up;
 %ignore faiss::read_InvertedLists_up;
 
+%include <faiss/clone_index.h>
 %include  <faiss/index_io.h>
 // clone_index.h already %included earlier (before MetalCloner.h).
 %newobject index_factory;

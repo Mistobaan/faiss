@@ -18,6 +18,18 @@ The GPU implementation can accept input from either CPU or GPU memory. On a serv
 
 Faiss comes with precompiled libraries for Anaconda in Python, see [faiss-cpu](https://anaconda.org/pytorch/faiss-cpu), [faiss-gpu](https://anaconda.org/pytorch/faiss-gpu) and [faiss-gpu-cuvs](https://anaconda.org/pytorch/faiss-gpu-cuvs). The library is mostly implemented in C++, the only dependency is a [BLAS](https://en.wikipedia.org/wiki/Basic_Linear_Algebra_Subprograms) implementation. Optional GPU support is provided via CUDA or AMD ROCm, and the Python interface is also optional. The backend GPU implementations of NVIDIA [cuVS](https://github.com/rapidsai/cuvs) can also be enabled optionally. It compiles with cmake. See [INSTALL.md](INSTALL.md) for details.
 
+```shell
+brew install cmake swig blaslib libomp
+
+./scripts/ci/build-metal-wheel-osx-arm64.sh
+```
+
+The Metal wheel build script performs a post-build Mach-O repair step on
+macOS. It rewrites the OpenMP dependency to `@rpath/libomp.dylib`, prefers
+PyTorch's bundled `torch/lib/libomp.dylib` when that package is installed, and
+vendors a fallback `faiss/lib/libomp.dylib` so the wheel still works on its
+own.
+
 ## How Faiss works
 
 Faiss is built around an index type that stores a set of vectors, and provides a function to search in them with L2 and/or dot product vector comparison. Some index types are simple baselines, such as exact search. Most of the available indexing structures correspond to various trade-offs with respect to

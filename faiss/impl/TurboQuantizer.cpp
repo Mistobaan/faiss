@@ -29,19 +29,45 @@ constexpr int kTurboQuantMaxIter = 100;
 constexpr double kTurboQuantTol = 1e-8;
 constexpr double kTurboQuantPi = 3.14159265358979323846;
 
-std::vector<float> build_beta_codebook(size_t d, size_t nbits) {
+float vector_norm(const float* x, size_t d) {
+    double norm2 = 0.0;
+    for (size_t i = 0; i < d; i++) {
+        norm2 += double(x[i]) * x[i];
+    }
+    return std::sqrt(norm2);
+}
+
+} // namespace
+
+void build_TurboQuantMSECodebook(
+        size_t d,
+        size_t nbits,
+        std::vector<float>& centroids,
+        std::vector<float>& boundaries) {
+    FAISS_THROW_IF_NOT_FMT(
+            nbits <= kTurboQuantMaxBits,
+            "invalid TurboQuant nbits %zu (must be in [0, %zu])",
+            nbits,
+            kTurboQuantMaxBits);
+
     if (nbits == 0) {
-        return {};
+        centroids.clear();
+        boundaries.clear();
+        return;
     }
 
     const size_t k = size_t(1) << nbits;
 
     if (d == 1) {
-        std::vector<float> centroids(k);
+        centroids.resize(k);
         for (size_t i = 0; i < k; i++) {
             centroids[i] = i < k / 2 ? -1.0f : 1.0f;
         }
-        return centroids;
+        boundaries.resize(k - 1);
+        for (size_t i = 0; i + 1 < k; i++) {
+            boundaries[i] = 0.5f * (centroids[i] + centroids[i + 1]);
+        }
+        return;
     }
 
     const size_t ngrid =
@@ -89,36 +115,37 @@ std::vector<float> build_beta_codebook(size_t d, size_t nbits) {
         cuts[i] = std::min(cuts[i], ngrid);
     }
 
-    std::vector<double> centroids(k);
+    std::vector<double> centroids_d(k);
     for (size_t i = 0; i < k; i++) {
         const double left = -1.0 + 2.0 * i / k;
         const double right = -1.0 + 2.0 * (i + 1) / k;
-        centroids[i] = range_mean(cuts[i], cuts[i + 1], 0.5 * (left + right));
+        centroids_d[i] =
+                range_mean(cuts[i], cuts[i + 1], 0.5 * (left + right));
     }
 
-    std::vector<double> boundaries(k > 0 ? k - 1 : 0);
+    std::vector<double> boundaries_d(k > 0 ? k - 1 : 0);
 
     for (int iter = 0; iter < kTurboQuantMaxIter; iter++) {
         for (size_t i = 0; i + 1 < k; i++) {
-            boundaries[i] = 0.5 * (centroids[i] + centroids[i + 1]);
+            boundaries_d[i] = 0.5 * (centroids_d[i] + centroids_d[i + 1]);
         }
 
         cuts[0] = 0;
         cuts[k] = ngrid;
         for (size_t i = 1; i < k; i++) {
             cuts[i] = std::upper_bound(
-                              xs.begin(), xs.end(), boundaries[i - 1]) -
+                              xs.begin(), xs.end(), boundaries_d[i - 1]) -
                     xs.begin();
         }
 
         double max_delta = 0.0;
         for (size_t i = 0; i < k; i++) {
-            const double left = i == 0 ? -1.0 : boundaries[i - 1];
-            const double right = i + 1 == k ? 1.0 : boundaries[i];
+            const double left = i == 0 ? -1.0 : boundaries_d[i - 1];
+            const double right = i + 1 == k ? 1.0 : boundaries_d[i];
             double c = range_mean(cuts[i], cuts[i + 1], 0.5 * (left + right));
             c = std::min(std::max(c, left), right);
-            max_delta = std::max(max_delta, std::abs(c - centroids[i]));
-            centroids[i] = c;
+            max_delta = std::max(max_delta, std::abs(c - centroids_d[i]));
+            centroids_d[i] = c;
         }
 
         if (max_delta < kTurboQuantTol) {
@@ -126,23 +153,17 @@ std::vector<float> build_beta_codebook(size_t d, size_t nbits) {
         }
     }
 
-    std::vector<float> result(k);
+    std::sort(centroids_d.begin(), centroids_d.end());
+
+    centroids.resize(k);
+    boundaries.resize(k - 1);
     for (size_t i = 0; i < k; i++) {
-        result[i] = centroids[i];
+        centroids[i] = centroids_d[i];
     }
-    std::sort(result.begin(), result.end());
-    return result;
-}
-
-float vector_norm(const float* x, size_t d) {
-    double norm2 = 0.0;
-    for (size_t i = 0; i < d; i++) {
-        norm2 += double(x[i]) * x[i];
+    for (size_t i = 0; i + 1 < k; i++) {
+        boundaries[i] = 0.5f * (centroids[i] + centroids[i + 1]);
     }
-    return std::sqrt(norm2);
 }
-
-} // namespace
 
 TurboQuantMSEQuantizer::TurboQuantMSEQuantizer(
         size_t d_in,
@@ -184,13 +205,7 @@ void TurboQuantMSEQuantizer::update_boundaries() {
 }
 
 void TurboQuantMSEQuantizer::init_codebook() {
-    if (nbits == 0) {
-        centroids.clear();
-        boundaries.clear();
-        return;
-    }
-    centroids = build_beta_codebook(d, nbits);
-    update_boundaries();
+    build_TurboQuantMSECodebook(d, nbits, centroids, boundaries);
 }
 
 void TurboQuantMSEQuantizer::initialize() {

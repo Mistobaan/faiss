@@ -23,11 +23,13 @@ TEST(TestFactoryTools, TestReverseIndexFactory) {
                  "PQ4x8",
                  "HNSW32",
                  "SQ8",
+                 "SQtqmse4",
                  "SQfp16",
                  "NSG24,Flat",
                  "NSG16,SQ8",
                  "RaBitQ",
                  "IVF8,RaBitQ",
+                 "IVF8,SQtqmse8",
          }) {
         std::unique_ptr<Index> index{index_factory(64, factory)};
         ASSERT_TRUE(index);
