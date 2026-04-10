@@ -58,15 +58,6 @@ class TestEncodeDecode(unittest.TestCase):
     def test_SQ8(self):
         self.do_encode_twice('SQ8')
 
-    def test_SQtqmse1(self):
-        self.do_encode_twice('SQtqmse1')
-
-    def test_SQtqmse2(self):
-        self.do_encode_twice('SQtqmse2')
-
-    def test_SQtqmse3(self):
-        self.do_encode_twice('SQtqmse3')
-
     def test_SQtqmse4(self):
         self.do_encode_twice('SQtqmse4')
 
@@ -196,6 +187,26 @@ class TestAccuracy(unittest.TestCase):
 
     def test_SQ(self):
         self.compare_accuracy('SQ4', 'SQ8')
+
+    def test_tqmse_accuracy_ordering(self):
+        d = 96
+        nb = 1000
+        nq = 0
+        nt = 2000
+
+        xt, x, _ = get_dataset_2(d, nt, nb, nq)
+        faiss.normalize_L2(xt)
+        faiss.normalize_L2(x)
+
+        errs = []
+        for factory_string in ('SQtqmse4', 'SQtqmse8'):
+            codec = faiss.index_factory(d, factory_string)
+            codec.train(xt)
+            codes = codec.sa_encode(x)
+            x2 = codec.sa_decode(codes)
+            errs.append(((x - x2) ** 2).sum())
+
+        self.assertGreater(errs[0], errs[1])
 
     def test_SQ2(self):
         self.compare_accuracy('SQ6', 'SQ8')

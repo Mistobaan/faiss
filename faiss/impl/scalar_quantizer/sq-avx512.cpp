@@ -243,6 +243,35 @@ struct QuantizerTemplate<
     }
 };
 
+template <int NBITS>
+struct QuantizerTemplate<
+        CodecTurboQuantMSE<NBITS, SIMDLevel::AVX512>,
+        scalar_quantizer::QuantizerTemplateScaling::NON_UNIFORM,
+        SIMDLevel::AVX512>
+        : QuantizerTemplate<
+                  CodecTurboQuantMSE<NBITS, SIMDLevel::AVX512>,
+                  scalar_quantizer::QuantizerTemplateScaling::NON_UNIFORM,
+                  SIMDLevel::NONE> {
+    QuantizerTemplate(size_t d, const std::vector<float>& trained)
+            : QuantizerTemplate<
+                      CodecTurboQuantMSE<NBITS, SIMDLevel::AVX512>,
+                      scalar_quantizer::QuantizerTemplateScaling::NON_UNIFORM,
+                      SIMDLevel::NONE>(d, trained) {
+        assert(d % 16 == 0);
+    }
+
+    FAISS_ALWAYS_INLINE simd16float32
+    reconstruct_16_components(const uint8_t* code, int i) const {
+        float tmp[16];
+        for (int j = 0; j < 16; j++) {
+            tmp[j] = this->centroids
+                    [CodecTurboQuantMSE<NBITS, SIMDLevel::AVX512>::decode_index(
+                            code, i + j)];
+        }
+        return simd16float32(tmp);
+    }
+};
+
 /**********************************************************
  * TurboQuant MSE quantizer
  **********************************************************/

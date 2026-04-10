@@ -7,9 +7,7 @@
 
 #pragma once
 
-#include <algorithm>
-
-#include <faiss/impl/FaissAssert.h>
+#include <faiss/impl/scalar_quantizer/codecs.h>
 #include <faiss/impl/ScalarQuantizer.h>
 #include <faiss/impl/simdlib/simdlib_dispatch.h>
 #include <faiss/utils/bf16.h>
@@ -27,7 +25,10 @@ using QuantizerType = ScalarQuantizer::QuantizerType;
  * through a codec
  *******************************************************************/
 
-enum class QuantizerTemplateScaling { UNIFORM = 0, NON_UNIFORM = 1 };
+enum class QuantizerTemplateScaling {
+    UNIFORM = 0,
+    NON_UNIFORM = 1
+};
 
 template <class Codec, QuantizerTemplateScaling SCALING, SIMDLevel SL>
 struct QuantizerTemplate {};
@@ -117,87 +118,47 @@ struct QuantizerTemplate<
 };
 
 /*******************************************************************
- * TurboQuant MSE quantizer
+ * TurboQuant is still a non-uniform scalar quantizer, but its
+ * training state is a shared centroid/boundary codebook rather than
+ * per-dimension affine ranges.
  *******************************************************************/
-template <int NBits, SIMDLevel SL>
-struct QuantizerTurboQuantMSE;
 
-template <int NBits>
-struct QuantizerTurboQuantMSE<NBits, SIMDLevel::NONE>
-        : ScalarQuantizer::SQuantizer {
-    static_assert(NBits >= 1 && NBits <= 8);
-
-    static constexpr size_t kCentroidsCount = size_t(1) << NBits;
-    static constexpr uint16_t kIndexMask =
-            static_cast<uint16_t>((1u << NBits) - 1);
-
+template <int NBITS, SIMDLevel SL>
+struct QuantizerTemplate<
+        CodecTurboQuantMSE<NBITS, SL>,
+        QuantizerTemplateScaling::NON_UNIFORM,
+        SIMDLevel::NONE> : ScalarQuantizer::SQuantizer {
     const size_t d;
     const float* centroids;
     const float* boundaries;
 
-    QuantizerTurboQuantMSE(size_t d_in, const std::vector<float>& trained)
+    QuantizerTemplate(size_t d_in, const std::vector<float>& trained)
             : d(d_in), centroids(nullptr), boundaries(nullptr) {
-        FAISS_THROW_IF_NOT(trained.size() == 2 * kCentroidsCount - 1);
+        constexpr size_t kCentroids = CodecTurboQuantMSE<NBITS, SL>::kCentroids;
+        FAISS_THROW_IF_NOT(trained.size() == kCentroids + (kCentroids - 1));
         centroids = trained.data();
-        boundaries = trained.data() + kCentroidsCount;
-    }
-
-    FAISS_ALWAYS_INLINE uint8_t select_index(float x) const {
-        return static_cast<uint8_t>(
-                std::upper_bound(
-                        boundaries, boundaries + (kCentroidsCount - 1), x) -
-                boundaries);
-    }
-
-    FAISS_ALWAYS_INLINE void encode_index(uint8_t idx, uint8_t* code, size_t i)
-            const {
-        const size_t bit_offset = i * NBits;
-        const size_t byte_offset = bit_offset >> 3;
-        const size_t bit_shift = bit_offset & 7;
-        const uint16_t packed = static_cast<uint16_t>(idx & kIndexMask)
-                << bit_shift;
-        code[byte_offset] |= packed & 0xff;
-        if (bit_shift + NBits > 8) {
-            code[byte_offset + 1] |= packed >> 8;
-        }
-    }
-
-    FAISS_ALWAYS_INLINE uint8_t
-    decode_index(const uint8_t* code, size_t i) const {
-        const size_t bit_offset = i * NBits;
-        const size_t byte_offset = bit_offset >> 3;
-        const size_t bit_shift = bit_offset & 7;
-
-        uint16_t packed = code[byte_offset];
-        if (bit_shift + NBits > 8) {
-            packed |= static_cast<uint16_t>(code[byte_offset + 1]) << 8;
-        }
-        return static_cast<uint8_t>((packed >> bit_shift) & kIndexMask);
+        boundaries = trained.data() + kCentroids;
     }
 
     void encode_vector(const float* x, uint8_t* code) const final {
         for (size_t i = 0; i < d; i++) {
-            encode_index(select_index(x[i]), code, i);
+            CodecTurboQuantMSE<NBITS, SL>::encode_component(
+                    x[i], boundaries, code, i);
         }
     }
 
     void decode_vector(const uint8_t* code, float* x) const final {
         for (size_t i = 0; i < d; i++) {
-            x[i] = centroids[decode_index(code, i)];
+            x[i] = centroids[CodecTurboQuantMSE<NBITS, SL>::decode_index(
+                    code, i)];
         }
     }
 
     FAISS_ALWAYS_INLINE float reconstruct_component(
             const uint8_t* code,
             size_t i) const {
-        return centroids[decode_index(code, i)];
+        return centroids[CodecTurboQuantMSE<NBITS, SL>::decode_index(code, i)];
     }
-};
-
-template <int NBits, SIMDLevel SL>
-struct QuantizerTurboQuantMSE : QuantizerTurboQuantMSE<NBits, SIMDLevel::NONE> {
-    using QuantizerTurboQuantMSE<NBits, SIMDLevel::NONE>::
-            QuantizerTurboQuantMSE;
 };
 
 /*******************************************************************

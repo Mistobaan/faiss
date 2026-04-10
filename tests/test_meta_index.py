@@ -3,12 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import os
 import numpy as np
 import faiss
 import unittest
 
-from common_faiss_tests import Randu10k
+from common_faiss_tests import Randu10k, macos_has_old_broken_libomp
 
 from faiss.contrib.datasets import SyntheticDataset
 
@@ -76,8 +75,10 @@ class IDRemap(unittest.TestCase):
 
 class Shards(unittest.TestCase):
 
-    @unittest.skipIf(os.name == "posix" and os.uname().sysname == "Darwin",
-                     "There is a bug in the OpenMP implementation on OSX.")
+    @unittest.skipIf(
+        macos_has_old_broken_libomp(),
+        "There is a bug in older libomp implementations on macOS.",
+    )
     def test_shards(self):
         k = 32
         ref_index = faiss.IndexFlatL2(d)

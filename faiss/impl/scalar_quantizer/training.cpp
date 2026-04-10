@@ -8,6 +8,7 @@
 #include <faiss/impl/scalar_quantizer/training.h>
 
 #include <faiss/impl/FaissAssert.h>
+#include <faiss/impl/TurboQuantizer.h>
 #include <algorithm>
 #include <cmath>
 
@@ -379,6 +380,28 @@ void train_NonUniform(
             vmin[j] = trained_d[0];
             vmax[j] = trained_d[1];
         }
+    }
+}
+
+void train_TurboQuantMSE(
+        size_t d,
+        size_t nbits,
+        std::vector<float>& trained) {
+    FAISS_THROW_IF_NOT_FMT(
+            nbits > 0,
+            "invalid TurboQuant SQ nbits %zu (must be > 0)",
+            nbits);
+    std::vector<float> centroids;
+    std::vector<float> boundaries;
+    build_TurboQuantMSECodebook(d, nbits, centroids, boundaries);
+    const size_t k = centroids.size();
+
+    trained.resize(k + (k - 1));
+    for (size_t i = 0; i < k; i++) {
+        trained[i] = centroids[i];
+    }
+    for (size_t i = 0; i + 1 < k; i++) {
+        trained[k + i] = boundaries[i];
     }
 }
 

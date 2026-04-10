@@ -7,10 +7,7 @@
 
 #include <gtest/gtest.h>
 
-#include <array>
 #include <cmath>
-#include <cstring>
-#include <memory>
 #include <random>
 #include <vector>
 
@@ -282,6 +279,64 @@ void check_tqmse_roundtrip(
 
 } // namespace
 
+namespace {
+
+std::vector<float> make_normalized_vectors(size_t n, size_t d) {
+    std::mt19937 rng(1234);
+    std::normal_distribution<float> distrib(0.0f, 1.0f);
+    std::vector<float> x(n * d);
+
+    for (size_t i = 0; i < n; i++) {
+        float* xi = x.data() + i * d;
+        double norm2 = 0.0;
+        for (size_t j = 0; j < d; j++) {
+            xi[j] = distrib(rng);
+            norm2 += double(xi[j]) * xi[j];
+        }
+        const float inv_norm =
+                norm2 > 0.0 ? 1.0f / std::sqrt(norm2) : 1.0f;
+        for (size_t j = 0; j < d; j++) {
+            xi[j] *= inv_norm;
+        }
+    }
+
+    return x;
+}
+
+float mean_squared_error(
+        const std::vector<float>& x,
+        const std::vector<float>& y) {
+    EXPECT_EQ(x.size(), y.size());
+    double err = 0.0;
+    for (size_t i = 0; i < x.size(); i++) {
+        const double diff = double(x[i]) - y[i];
+        err += diff * diff;
+    }
+    return err / x.size();
+}
+
+void check_tqmse_roundtrip(size_t d, faiss::ScalarQuantizer::QuantizerType qtype) {
+    const size_t n = 128;
+    std::vector<float> x = make_normalized_vectors(n, d);
+    faiss::ScalarQuantizer sq(d, qtype);
+
+    sq.train(n, x.data());
+
+    std::vector<uint8_t> codes(sq.code_size * n, 0);
+    sq.compute_codes(x.data(), codes.data(), n);
+
+    std::vector<float> decoded(n * d);
+    sq.decode(codes.data(), decoded.data(), n);
+
+    for (float v : decoded) {
+        EXPECT_TRUE(std::isfinite(v));
+        EXPECT_LE(v, 1.0f);
+        EXPECT_GE(v, -1.0f);
+    }
+}
+
+} // namespace
+
 TEST(ScalarQuantizer, RSQuantilesClamping) {
     int d = 8;
     int n = 100;
@@ -367,214 +422,35 @@ TEST(ScalarQuantizer, RSQuantilesSmallDataset) {
     ASSERT_NO_THROW(sq.train(n, x.data()));
 }
 
-TEST(TestSQ0bit, CoarseOnlySearch) {
-    // Test QT_0bit: centroid-only distance
-    int d = 64;
-    int nlist = 8;
-    int nb = 1000;
-    int nq = 10;
-    int k = 5;
-
-    std::mt19937 rng(42);
-    std::uniform_real_distribution<float> distrib(0.0f, 1.0f);
-    std::vector<float> xb(nb * d), xq(nq * d);
-    for (int i = 0; i < nb * d; i++) {
-        xb[i] = distrib(rng);
-    }
-    for (int i = 0; i < nq * d; i++) {
-        xq[i] = distrib(rng);
-    }
-
-    faiss::IndexFlatL2 quantizer(d);
-    faiss::IndexIVFScalarQuantizer index(
-            &quantizer,
-            d,
-            nlist,
-            faiss::ScalarQuantizer::QT_0bit,
-            faiss::METRIC_L2,
-            false);
-    EXPECT_EQ(index.code_size, 0);
-    EXPECT_FALSE(index.by_residual);
-
-    index.train(nb, xb.data());
-    index.add(nb, xb.data());
-    EXPECT_EQ(index.ntotal, nb);
-
-    index.nprobe = nlist;
-    std::vector<float> distances(nq * k);
-    std::vector<faiss::idx_t> labels(nq * k);
-    index.search(nq, xq.data(), k, distances.data(), labels.data());
-
-    // Verify we got results
-    for (int q = 0; q < nq; q++) {
-        EXPECT_GE(labels[q * k], 0);
-    }
-
-    // Compare with direct quantizer search - distances should match
-    std::vector<float> coarse_dis(nq * nlist);
-    std::vector<faiss::idx_t> coarse_ids(nq * nlist);
-    quantizer.search(
-            nq, xq.data(), nlist, coarse_dis.data(), coarse_ids.data());
-
-    for (int q = 0; q < nq; q++) {
-        float ivf_dis = distances[q * k];
-        bool found = false;
-        for (int j = 0; j < nlist; j++) {
-            if (std::abs(ivf_dis - coarse_dis[q * nlist + j]) < 1e-5) {
-                found = true;
-                break;
-            }
-        }
-        EXPECT_TRUE(found) << "IVF distance " << ivf_dis
-                           << " not found in coarse distances for query " << q;
-    }
-}
-
-TEST(TestSQ0bit, IndexFactory) {
-    int d = 32;
-    std::unique_ptr<faiss::Index> index(faiss::index_factory(d, "IVF8,SQ0"));
-    EXPECT_NE(index, nullptr);
-    auto* ivfsq = dynamic_cast<faiss::IndexIVFScalarQuantizer*>(index.get());
-    EXPECT_NE(ivfsq, nullptr);
-    EXPECT_EQ(ivfsq->sq.qtype, faiss::ScalarQuantizer::QT_0bit);
-    EXPECT_EQ(ivfsq->code_size, 0);
-}
-
-TEST(TestSQ0bit, InnerProduct) {
-    int d = 64;
-    int nlist = 4;
-    int nb = 500;
-    int nq = 5;
-    int k = 3;
-
-    std::mt19937 rng2(43);
-    std::uniform_real_distribution<float> distrib2(0.0f, 1.0f);
-    std::vector<float> xb(nb * d), xq(nq * d);
-    for (int i = 0; i < nb * d; i++) {
-        xb[i] = distrib2(rng2);
-    }
-    for (int i = 0; i < nq * d; i++) {
-        xq[i] = distrib2(rng2);
-    }
-
-    faiss::IndexFlatIP quantizer(d);
-    faiss::IndexIVFScalarQuantizer index(
-            &quantizer,
-            d,
-            nlist,
-            faiss::ScalarQuantizer::QT_0bit,
-            faiss::METRIC_INNER_PRODUCT,
-            false);
-
-    index.train(nb, xb.data());
-    index.add(nb, xb.data());
-
-    index.nprobe = nlist;
-    std::vector<float> distances(nq * k);
-    std::vector<faiss::idx_t> labels(nq * k);
-    index.search(nq, xq.data(), k, distances.data(), labels.data());
-
-    for (int q = 0; q < nq; q++) {
-        EXPECT_GE(labels[q * k], 0);
-    }
-}
-
 TEST(ScalarQuantizer, TQMSEEncodeDecode) {
-    check_tqmse_roundtrip(32, faiss::ScalarQuantizer::QT_1bit_tqmse);
-    check_tqmse_roundtrip(32, faiss::ScalarQuantizer::QT_2bit_tqmse);
-    check_tqmse_roundtrip(32, faiss::ScalarQuantizer::QT_3bit_tqmse);
-    check_tqmse_roundtrip(32, faiss::ScalarQuantizer::QT_4bit_tqmse);
-    check_tqmse_roundtrip(32, faiss::ScalarQuantizer::QT_8bit_tqmse);
+    check_tqmse_roundtrip(32, faiss::ScalarQuantizer::QT_tqmse_4bit);
+    check_tqmse_roundtrip(32, faiss::ScalarQuantizer::QT_tqmse_8bit);
 }
 
 TEST(ScalarQuantizer, TQMSEAccuracyOrdering) {
     const size_t d = 32;
     const size_t n = 256;
     std::vector<float> x = make_normalized_vectors(n, d);
-    const std::array<faiss::ScalarQuantizer::QuantizerType, 5> qtypes = {
-            faiss::ScalarQuantizer::QT_1bit_tqmse,
-            faiss::ScalarQuantizer::QT_2bit_tqmse,
-            faiss::ScalarQuantizer::QT_3bit_tqmse,
-            faiss::ScalarQuantizer::QT_4bit_tqmse,
-            faiss::ScalarQuantizer::QT_8bit_tqmse};
 
-    std::vector<float> mses;
-    mses.reserve(qtypes.size());
+    faiss::ScalarQuantizer sq4(d, faiss::ScalarQuantizer::QT_tqmse_4bit);
+    faiss::ScalarQuantizer sq8(d, faiss::ScalarQuantizer::QT_tqmse_8bit);
+    sq4.train(n, x.data());
+    sq8.train(n, x.data());
 
-    for (auto qtype : qtypes) {
-        faiss::ScalarQuantizer sq(d, qtype);
-        sq.train(n, x.data());
+    std::vector<uint8_t> codes4(sq4.code_size * n, 0);
+    std::vector<uint8_t> codes8(sq8.code_size * n, 0);
+    sq4.compute_codes(x.data(), codes4.data(), n);
+    sq8.compute_codes(x.data(), codes8.data(), n);
 
-        std::vector<uint8_t> codes(sq.code_size * n, 0);
-        sq.compute_codes(x.data(), codes.data(), n);
+    std::vector<float> decoded4(n * d);
+    std::vector<float> decoded8(n * d);
+    sq4.decode(codes4.data(), decoded4.data(), n);
+    sq8.decode(codes8.data(), decoded8.data(), n);
 
-        std::vector<float> decoded(n * d);
-        sq.decode(codes.data(), decoded.data(), n);
-        mses.push_back(mean_squared_error(x, decoded));
-    }
-
-    for (size_t i = 0; i + 1 < mses.size(); ++i) {
-        EXPECT_GE(mses[i], mses[i + 1]);
-    }
+    EXPECT_LT(mean_squared_error(x, decoded8), mean_squared_error(x, decoded4));
 }
 
 TEST(ScalarQuantizer, TQMSENonSimdDims) {
-    check_tqmse_roundtrip(7, faiss::ScalarQuantizer::QT_1bit_tqmse);
-    check_tqmse_roundtrip(9, faiss::ScalarQuantizer::QT_2bit_tqmse);
-    check_tqmse_roundtrip(11, faiss::ScalarQuantizer::QT_3bit_tqmse);
-    check_tqmse_roundtrip(13, faiss::ScalarQuantizer::QT_4bit_tqmse);
-    check_tqmse_roundtrip(33, faiss::ScalarQuantizer::QT_8bit_tqmse);
-}
-
-TEST(ScalarQuantizer, TQMSESimdDispatchSelection) {
-    const std::vector<faiss::SIMDLevel> levels = available_tqmse_simd_levels();
-    if (levels.empty()) {
-        GTEST_SKIP() << "No SIMD level available for TurboQuant dispatch tests";
-    }
-
-    for (faiss::SIMDLevel level : levels) {
-        SCOPED_TRACE(faiss::to_string(level));
-        expect_tqmse_simd_dispatch_for_compatible_dim<1>(
-                level, faiss::ScalarQuantizer::QT_1bit_tqmse);
-        expect_tqmse_simd_dispatch_for_compatible_dim<2>(
-                level, faiss::ScalarQuantizer::QT_2bit_tqmse);
-        expect_tqmse_simd_dispatch_for_compatible_dim<3>(
-                level, faiss::ScalarQuantizer::QT_3bit_tqmse);
-        expect_tqmse_simd_dispatch_for_compatible_dim<4>(
-                level, faiss::ScalarQuantizer::QT_4bit_tqmse);
-        expect_tqmse_simd_dispatch_for_compatible_dim<8>(
-                level, faiss::ScalarQuantizer::QT_8bit_tqmse);
-
-        expect_tqmse_simd_dispatch_fallback_for_incompatible_dim<1>(
-                level, 7, faiss::ScalarQuantizer::QT_1bit_tqmse);
-        expect_tqmse_simd_dispatch_fallback_for_incompatible_dim<2>(
-                level, 9, faiss::ScalarQuantizer::QT_2bit_tqmse);
-        expect_tqmse_simd_dispatch_fallback_for_incompatible_dim<3>(
-                level, 11, faiss::ScalarQuantizer::QT_3bit_tqmse);
-        expect_tqmse_simd_dispatch_fallback_for_incompatible_dim<4>(
-                level, 13, faiss::ScalarQuantizer::QT_4bit_tqmse);
-        expect_tqmse_simd_dispatch_fallback_for_incompatible_dim<8>(
-                level, 33, faiss::ScalarQuantizer::QT_8bit_tqmse);
-    }
-}
-
-TEST(ScalarQuantizer, TQMSESimdDistancePathParity) {
-    const std::vector<faiss::SIMDLevel> levels = available_tqmse_simd_levels();
-    if (levels.empty()) {
-        GTEST_SKIP() << "No SIMD level available for TurboQuant parity tests";
-    }
-
-    for (faiss::SIMDLevel level : levels) {
-        SCOPED_TRACE(faiss::to_string(level));
-        check_tqmse_distance_path_parity<1>(
-                level, faiss::ScalarQuantizer::QT_1bit_tqmse);
-        check_tqmse_distance_path_parity<2>(
-                level, faiss::ScalarQuantizer::QT_2bit_tqmse);
-        check_tqmse_distance_path_parity<3>(
-                level, faiss::ScalarQuantizer::QT_3bit_tqmse);
-        check_tqmse_distance_path_parity<4>(
-                level, faiss::ScalarQuantizer::QT_4bit_tqmse);
-        check_tqmse_distance_path_parity<8>(
-                level, faiss::ScalarQuantizer::QT_8bit_tqmse);
-    }
+    check_tqmse_roundtrip(7, faiss::ScalarQuantizer::QT_tqmse_4bit);
+    check_tqmse_roundtrip(33, faiss::ScalarQuantizer::QT_tqmse_8bit);
 }

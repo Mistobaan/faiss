@@ -7,6 +7,10 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+from functools import lru_cache
+import re
+import shutil
+import subprocess
 import sys
 
 import numpy as np
@@ -138,6 +142,46 @@ _SIMD_LEVEL_NAMES = {
     faiss.SIMDLevel_ARM_NEON: "ARM_NEON",
     faiss.SIMDLevel_ARM_SVE: "ARM_SVE",
 }
+
+_KNOWN_GOOD_MACOS_LIBOMP_VERSION = (22, 1, 3)
+
+
+def _parse_version_tuple(version):
+    return tuple(int(part) for part in re.findall(r"\d+", version))
+
+
+@lru_cache(maxsize=1)
+def macos_has_old_broken_libomp():
+    """Return True only for older Homebrew libomp versions on macOS.
+
+    The threaded shards/replicas tests were historically skipped on every
+    macOS machine due to an OpenMP runtime bug. They pass on this branch with
+    Homebrew libomp 22.1.3, so keep the guard only for older runtimes.
+    """
+    if sys.platform != "darwin":
+        return False
+
+    brew = shutil.which("brew")
+    if brew is None:
+        return False
+
+    try:
+        output = subprocess.check_output(
+            [brew, "list", "--versions", "libomp"],
+            text=True,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return False
+
+    versions = output.split()[1:]
+    if not versions:
+        return False
+
+    version = max((_parse_version_tuple(item) for item in versions), default=())
+    if not version:
+        return False
+
+    return version < _KNOWN_GOOD_MACOS_LIBOMP_VERSION
 
 
 def for_all_simd_levels(cls):

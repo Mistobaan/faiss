@@ -3,11 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+# Import Faiss before torch to avoid dual-libomp initialization on macOS.
+import faiss  # usort: skip
 import torch  # usort: skip
 import unittest  # usort: skip
 import numpy as np  # usort: skip
-
-import faiss  # usort: skip
 import faiss.contrib.torch_utils  # usort: skip
 from faiss.contrib import datasets
 from faiss.contrib.torch import clustering, quantization

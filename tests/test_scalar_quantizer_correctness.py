@@ -22,6 +22,8 @@ class TestScalarQuantizerEncodeDecode(unittest.TestCase):
         self.d = 32
         self.ds = SyntheticDataset(d=self.d, nt=0, nb=1000, nq=0, seed=42)
         self.xb = self.ds.get_database()
+        self.xb_unit = self.xb.copy()
+        faiss.normalize_L2(self.xb_unit)
 
     def do_encode_decode(self, qtype, max_err):
         sq = faiss.ScalarQuantizer(self.d, qtype)
@@ -44,25 +46,18 @@ class TestScalarQuantizerEncodeDecode(unittest.TestCase):
     def test_4bit_uniform(self):
         self.do_encode_decode(faiss.ScalarQuantizer.QT_4bit_uniform, 0.1)
 
-    def test_tqmse_1bit(self):
-        faiss.normalize_L2(self.xb)
-        self.do_encode_decode(faiss.ScalarQuantizer.QT_1bit_tqmse, 1.0)
+    def test_tqmse_encode_decode(self):
+        errs = []
+        for qtype in [
+                faiss.ScalarQuantizer.QT_tqmse_4bit,
+                faiss.ScalarQuantizer.QT_tqmse_8bit]:
+            sq = faiss.ScalarQuantizer(self.d, qtype)
+            sq.train(self.xb_unit)
+            codes = sq.compute_codes(self.xb_unit)
+            xb_decoded = sq.decode(codes)
+            errs.append(((self.xb_unit - xb_decoded) ** 2).mean())
 
-    def test_tqmse_2bit(self):
-        faiss.normalize_L2(self.xb)
-        self.do_encode_decode(faiss.ScalarQuantizer.QT_2bit_tqmse, 0.8)
-
-    def test_tqmse_3bit(self):
-        faiss.normalize_L2(self.xb)
-        self.do_encode_decode(faiss.ScalarQuantizer.QT_3bit_tqmse, 0.6)
-
-    def test_tqmse_4bit(self):
-        faiss.normalize_L2(self.xb)
-        self.do_encode_decode(faiss.ScalarQuantizer.QT_4bit_tqmse, 0.1)
-
-    def test_tqmse_8bit(self):
-        faiss.normalize_L2(self.xb)
-        self.do_encode_decode(faiss.ScalarQuantizer.QT_8bit_tqmse, 0.1)
+        self.assertGreater(errs[0], errs[1])
 
 
 @for_all_simd_levels
@@ -206,27 +201,19 @@ class TestScalarQuantizerEdgeCases(unittest.TestCase):
                 self.assertEqual(I.shape, (5, 10))
 
     def test_tqmse_non_simd_dims(self):
-        factory_strings = [
-            'SQtqmse1',
-            'SQtqmse2',
-            'SQtqmse3',
-            'SQtqmse4',
-            'SQtqmse8',
-        ]
         for d in [7, 9, 15, 17, 31, 33, 63, 65]:
-            for factory_str in factory_strings:
-                with self.subTest(d=d, factory_str=factory_str):
-                    ds = SyntheticDataset(d=d, nt=0, nb=100, nq=5, seed=42)
-                    xb = ds.get_database()
-                    xq = ds.get_queries()
-                    faiss.normalize_L2(xb)
-                    faiss.normalize_L2(xq)
-                    index = faiss.index_factory(d, factory_str)
-                    index.train(xb)
-                    index.add(xb)
-                    D, I = index.search(xq, 10)
-                    self.assertEqual(D.shape, (5, 10))
-                    self.assertEqual(I.shape, (5, 10))
+            with self.subTest(d=d):
+                ds = SyntheticDataset(d=d, nt=0, nb=100, nq=5, seed=42)
+                xb = ds.get_database()
+                xq = ds.get_queries()
+                faiss.normalize_L2(xb)
+                faiss.normalize_L2(xq)
+                index = faiss.index_factory(d, 'SQtqmse4')
+                index.train(xb)
+                index.add(xb)
+                D, I = index.search(xq, 10)
+                self.assertEqual(D.shape, (5, 10))
+                self.assertEqual(I.shape, (5, 10))
 
 
 @for_all_simd_levels

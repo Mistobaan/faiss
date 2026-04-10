@@ -16,6 +16,18 @@
 
 namespace faiss {
 
+#ifndef SWIG
+/** Build the analytical TurboQuant MSE scalar codebook on [-1, 1].
+ *
+ * centroids.size() will be 2^nbits and boundaries.size() will be 2^nbits - 1.
+ */
+void build_TurboQuantMSECodebook(
+        size_t d,
+        size_t nbits,
+        std::vector<float>& centroids,
+        std::vector<float>& boundaries);
+#endif
+
 /** MSE-optimized TurboQuant quantizer from
  *
  *   TurboQuant: Online Vector Quantization with Near-optimal Distortion Rate

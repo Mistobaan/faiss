@@ -27,11 +27,7 @@ class TestPCA(unittest.TestCase):
 
         # check that energy per component is decreasing
         column_norm2 = (y**2).sum(0)
-
-        prev = 1e50
-        for o in column_norm2:
-            self.assertGreater(prev, o)
-            prev = o
+        np.testing.assert_array_less(column_norm2[1:], column_norm2[:-1])
 
     def test_pca_retraining_gram_path(self):
         # Regression test for the sgemm_ beta=0 fix in PCAMatrix::train.

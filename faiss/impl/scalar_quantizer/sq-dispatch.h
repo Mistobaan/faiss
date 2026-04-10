@@ -85,19 +85,16 @@ ScalarQuantizer::SQuantizer* sq_select_quantizer<THE_LEVEL_TO_DISPATCH>(
             return new Quantizer8bitDirect<SL>(d, trained);
         case ScalarQuantizer::QT_8bit_direct_signed:
             return new Quantizer8bitDirectSigned<SL>(d, trained);
-        case ScalarQuantizer::QT_0bit:
-            FAISS_THROW_MSG(
-                    "QT_0bit does not support standalone quantization, use IndexIVFScalarQuantizer");
-        case ScalarQuantizer::QT_1bit_tqmse:
-            return new QuantizerTurboQuantMSE<1, SL>(d, trained);
-        case ScalarQuantizer::QT_2bit_tqmse:
-            return new QuantizerTurboQuantMSE<2, SL>(d, trained);
-        case ScalarQuantizer::QT_3bit_tqmse:
-            return new QuantizerTurboQuantMSE<3, SL>(d, trained);
-        case ScalarQuantizer::QT_4bit_tqmse:
-            return new QuantizerTurboQuantMSE<4, SL>(d, trained);
-        case ScalarQuantizer::QT_8bit_tqmse:
-            return new QuantizerTurboQuantMSE<8, SL>(d, trained);
+        case ScalarQuantizer::QT_tqmse_4bit:
+            return new QuantizerTemplate<
+                    CodecTurboQuantMSE<4, SL>,
+                    QuantizerTemplateScaling::NON_UNIFORM,
+                    SL>(d, trained);
+        case ScalarQuantizer::QT_tqmse_8bit:
+            return new QuantizerTemplate<
+                    CodecTurboQuantMSE<8, SL>,
+                    QuantizerTemplateScaling::NON_UNIFORM,
+                    SL>(d, trained);
         default:
             FAISS_THROW_MSG("unknown qtype");
     }
@@ -188,23 +185,25 @@ SQDistanceComputer* select_distance_computer_body(
         case ScalarQuantizer::QT_8bit_direct_signed:
             return new DCTemplate<Quantizer8bitDirectSigned<SL2>, Sim, SL2>(
                     d, trained);
-        case ScalarQuantizer::QT_0bit:
-            FAISS_THROW_MSG(
-                    "QT_0bit does not support standalone distance computation, use IndexIVFScalarQuantizer");
-        case ScalarQuantizer::QT_1bit_tqmse:
-            return new DCTemplate<QuantizerTurboQuantMSE<1, SL2>, Sim, SL2>(
+
+        case ScalarQuantizer::QT_tqmse_4bit:
+            return new DCTemplate<
+                    QuantizerTemplate<
+                            CodecTurboQuantMSE<4, SL2>,
+                            QuantizerTemplateScaling::NON_UNIFORM,
+                            SL2>,
+                    Sim,
+                    SL2>(
                     d, trained);
-        case ScalarQuantizer::QT_2bit_tqmse:
-            return new DCTemplate<QuantizerTurboQuantMSE<2, SL2>, Sim, SL2>(
-                    d, trained);
-        case ScalarQuantizer::QT_3bit_tqmse:
-            return new DCTemplate<QuantizerTurboQuantMSE<3, SL2>, Sim, SL2>(
-                    d, trained);
-        case ScalarQuantizer::QT_4bit_tqmse:
-            return new DCTemplate<QuantizerTurboQuantMSE<4, SL2>, Sim, SL2>(
-                    d, trained);
-        case ScalarQuantizer::QT_8bit_tqmse:
-            return new DCTemplate<QuantizerTurboQuantMSE<8, SL2>, Sim, SL2>(
+
+        case ScalarQuantizer::QT_tqmse_8bit:
+            return new DCTemplate<
+                    QuantizerTemplate<
+                            CodecTurboQuantMSE<8, SL2>,
+                            QuantizerTemplateScaling::NON_UNIFORM,
+                            SL2>,
+                    Sim,
+                    SL2>(
                     d, trained);
         default:
             FAISS_THROW_MSG("unknown qtype");
@@ -340,32 +339,20 @@ InvertedListScanner* sq_select_InvertedListScanner<THE_LEVEL_TO_DISPATCH>(
                         Quantizer8bitDirectSigned<SL2>,
                         Similarity,
                         SL2>>();
-            case ScalarQuantizer::QT_0bit:
-                return new IVFCoarseDistanceScanner(
-                        Similarity::metric_type != METRIC_L2, store_pairs, sel);
-            case ScalarQuantizer::QT_1bit_tqmse:
+            case ScalarQuantizer::QT_tqmse_4bit:
                 return scan.template operator()<DCTemplate<
-                        QuantizerTurboQuantMSE<1, SL2>,
+                        QuantizerTemplate<
+                                CodecTurboQuantMSE<4, SL2>,
+                                QuantizerTemplateScaling::NON_UNIFORM,
+                                SL2>,
                         Similarity,
                         SL2>>();
-            case ScalarQuantizer::QT_2bit_tqmse:
+            case ScalarQuantizer::QT_tqmse_8bit:
                 return scan.template operator()<DCTemplate<
-                        QuantizerTurboQuantMSE<2, SL2>,
-                        Similarity,
-                        SL2>>();
-            case ScalarQuantizer::QT_3bit_tqmse:
-                return scan.template operator()<DCTemplate<
-                        QuantizerTurboQuantMSE<3, SL2>,
-                        Similarity,
-                        SL2>>();
-            case ScalarQuantizer::QT_4bit_tqmse:
-                return scan.template operator()<DCTemplate<
-                        QuantizerTurboQuantMSE<4, SL2>,
-                        Similarity,
-                        SL2>>();
-            case ScalarQuantizer::QT_8bit_tqmse:
-                return scan.template operator()<DCTemplate<
-                        QuantizerTurboQuantMSE<8, SL2>,
+                        QuantizerTemplate<
+                                CodecTurboQuantMSE<8, SL2>,
+                                QuantizerTemplateScaling::NON_UNIFORM,
+                                SL2>,
                         Similarity,
                         SL2>>();
             default:
