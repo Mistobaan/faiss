@@ -97,6 +97,8 @@ include(../cmake/link_to_faiss_lib.cmake)
 link_to_faiss_lib(faiss_test)
 
 if (FAISS_ENABLE_PYTHON)
+  # Build the example SWIG module alongside the C++ tests without linking the
+  # Python extension into the standalone test executable.
   add_dependencies(faiss_test faiss_example_external_module)
 endif()
 include(FetchContent)
