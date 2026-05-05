@@ -4184,6 +4184,94 @@ def index_cpu_to_gpus_list(
     ngpu: int = -1,
 ) -> GpuIndex: ...
 
+class StandardMetalResources:
+    def __init__(self) -> None: ...
+    def getResources(self) -> Any: ...
+    def isAppleSilicon(self) -> bool: ...
+    def getDevice(self) -> int: ...
+
+class MetalIndexConfig:
+    device: int
+    def __init__(self) -> None: ...
+
+class MetalClonerOptions:
+    useFloat16: bool
+    verbose: bool
+    def __init__(self) -> None: ...
+
+class MetalIndexFlat(Index):
+    @overload
+    def __init__(
+        self,
+        provider: StandardMetalResources,
+        d: int,
+        metric: MetricType = METRIC_L2,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        provider: StandardMetalResources,
+        index: IndexFlat,
+    ) -> None: ...
+    def getDevice(self) -> int: ...
+    def reset(self) -> None: ...
+    def getNumVecs(self) -> int: ...
+
+class MetalIndexFlatL2(MetalIndexFlat):
+    @overload
+    def __init__(
+        self,
+        provider: StandardMetalResources,
+        d: int,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        provider: StandardMetalResources,
+        index: IndexFlatL2,
+    ) -> None: ...
+
+class MetalIndexFlatIP(MetalIndexFlat):
+    @overload
+    def __init__(
+        self,
+        provider: StandardMetalResources,
+        d: int,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        provider: StandardMetalResources,
+        index: IndexFlatIP,
+    ) -> None: ...
+
+class MetalIndexScalarQuantizer(Index):
+    @overload
+    def __init__(
+        self,
+        provider: StandardMetalResources,
+        d: int,
+        qtype: int,
+        metric: MetricType = METRIC_L2,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        provider: StandardMetalResources,
+        index: IndexScalarQuantizer,
+    ) -> None: ...
+    def getDevice(self) -> int: ...
+    def reset(self) -> None: ...
+    def getNumVecs(self) -> int: ...
+
+def index_cpu_to_metal(
+    provider: StandardMetalResources,
+    device: int,
+    index: Index,
+    options: MetalClonerOptions | None = None,
+) -> Index: ...
+def index_metal_to_cpu(metal_index: Index) -> Index: ...
+
 class GpuIndexConfig:
     device: int
     memorySpace: Any  # MemorySpace enum

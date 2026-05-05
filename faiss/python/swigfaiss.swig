@@ -221,6 +221,16 @@ typedef uint64_t size_t;
 #include <faiss/svs/IndexSVSIVFLeanVec.h>
 #endif
 
+#ifdef METAL_WRAPPER
+#include <faiss/metal/MetalResources.h>
+#include <faiss/metal/StandardMetalResources.h>
+#include <faiss/metal/MetalClonerOptions.h>
+#include <faiss/metal/MetalIndex.h>
+#include <faiss/metal/MetalIndexFlat.h>
+#include <faiss/metal/MetalIndexScalarQuantizer.h>
+#include <faiss/metal/MetalCloner.h>
+#endif
+
 %}
 
 /********************************************************
@@ -718,6 +728,26 @@ void gpu_sync_all_devices()
 %include  <faiss/svs/IndexSVSIVFLeanVec.h>
 #endif // FAISS_ENABLE_SVS
 
+#ifdef METAL_WRAPPER
+
+%shared_ptr(faiss::metal::MetalResources);
+%shared_ptr(faiss::metal::StandardMetalResourcesImpl);
+
+%include <faiss/metal/MetalResources.h>
+%include <faiss/metal/StandardMetalResources.h>
+%include <faiss/metal/MetalClonerOptions.h>
+%include <faiss/metal/MetalIndex.h>
+%include <faiss/metal/MetalIndexFlat.h>
+%include <faiss/metal/MetalIndexScalarQuantizer.h>
+
+// NOTE: MetalCloner.h (%newobject + %include) is intentionally placed AFTER
+// the %typemap(out) faiss::Index * block below. SWIG applies output typemaps
+// only to declarations processed after the typemap definition, so the cloner
+// functions must be declared after the downcast typemap for DOWNCAST_METAL to
+// take effect. See AGENTS.md.
+
+#endif // METAL_WRAPPER
+
 #ifdef GPU_WRAPPER
 
 // quiet SWIG warnings
@@ -788,6 +818,12 @@ typedef int cudaDataType_t;
 %define DOWNCAST_GPU(subclass)
     if (dynamic_cast<faiss::gpu::subclass *> ($1)) {
       $result = SWIG_NewPointerObj($1,SWIGTYPE_p_faiss__gpu__ ## subclass,$owner);
+    } else
+%enddef
+
+%define DOWNCAST_METAL(subclass)
+    if (dynamic_cast<faiss::metal::subclass *> ($1)) {
+      $result = SWIG_NewPointerObj($1,SWIGTYPE_p_faiss__metal__ ## subclass,$owner);
     } else
 %enddef
 
@@ -880,6 +916,13 @@ typedef int cudaDataType_t;
     DOWNCAST ( IndexSVSIVFLVQ )
     DOWNCAST ( IndexSVSIVF )
 #endif // FAISS_ENABLE_SVS
+#ifdef METAL_WRAPPER
+    DOWNCAST_METAL ( MetalIndexScalarQuantizer )
+    DOWNCAST_METAL ( MetalIndexFlatL2 )
+    DOWNCAST_METAL ( MetalIndexFlatIP )
+    DOWNCAST_METAL ( MetalIndexFlat )
+    DOWNCAST_METAL ( MetalIndex )
+#endif
 #ifdef GPU_WRAPPER
 #ifdef FAISS_ENABLE_CUVS
     DOWNCAST_GPU ( GpuIndexCagra )
@@ -1021,6 +1064,15 @@ faiss::Quantizer * downcast_Quantizer (faiss::Quantizer *aq)
 %include  <faiss/AutoTune.h>
 %include  <faiss/index_factory.h>
 %include  <faiss/MatrixStats.h>
+
+#ifdef METAL_WRAPPER
+
+%newobject faiss::metal::index_metal_to_cpu;
+%newobject faiss::metal::index_cpu_to_metal;
+
+%include <faiss/metal/MetalCloner.h>
+
+#endif // METAL_WRAPPER
 
 
 #ifdef GPU_WRAPPER

@@ -172,6 +172,13 @@ if "GPU" in get_compile_options():
     add_ref_in_constructor(GpuIndexIVFPQ, 1)
     add_ref_in_constructor(GpuIndexIVFScalarQuantizer, 1)
 
+if "METAL" in get_compile_options():
+    add_ref_in_constructor(MetalIndexFlat, 0)
+    add_ref_in_constructor(MetalIndexFlatL2, 0)
+    add_ref_in_constructor(MetalIndexFlatIP, 0)
+    add_ref_in_constructor(MetalIndexScalarQuantizer, 0)
+    add_ref_in_function("index_cpu_to_metal", 0)
+
 add_ref_in_constructor(IndexIVFFlat, 0)
 add_ref_in_constructor(IndexIVFFlatDedup, 0)
 add_ref_in_constructor(IndexIVFFlatPanorama, 0)
