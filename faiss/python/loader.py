@@ -86,6 +86,36 @@ def supported_instruction_sets():
 
 logger = logging.getLogger(__name__)
 
+
+def _preload_torch_openmp_runtime_on_macos():
+    if platform.system() != "Darwin":
+        return
+
+    try:
+        import ctypes
+        import importlib.util
+
+        spec = importlib.util.find_spec("torch")
+    except (ImportError, ValueError):
+        return
+
+    locations = getattr(spec, "submodule_search_locations", None)
+    if not locations:
+        return
+
+    torch_libomp = os.path.join(next(iter(locations)), "lib", "libomp.dylib")
+    if not os.path.exists(torch_libomp):
+        return
+
+    try:
+        ctypes.CDLL(torch_libomp, mode=getattr(ctypes, "RTLD_GLOBAL", 0))
+        logger.debug("Preloaded PyTorch OpenMP runtime from %s", torch_libomp)
+    except OSError as exc:
+        logger.debug("Could not preload PyTorch OpenMP runtime: %r", exc)
+
+
+_preload_torch_openmp_runtime_on_macos()
+
 instruction_sets = None
 
 # try to load optimization level from env variable
