@@ -16,6 +16,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   OMP_NUM_THREADS: "10"
   MKL_THREADING_LAYER: GNU
+  PACKAGE_TYPE: nightly
 
 jobs:
   metal-macos-wheel:
@@ -104,7 +105,7 @@ jobs:
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: faiss-metal-wheel-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.short_sha }}-${{ matrix.artifact_suffix }}
+          name: faiss-metal-wheel-${{ env.PACKAGE_TYPE }}-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.short_sha }}-${{ matrix.artifact_suffix }}
           path: dist/*.whl
           if-no-files-found: error
 
@@ -116,7 +117,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: faiss-metal-test-results-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.short_sha }}-${{ matrix.artifact_suffix }}
+          name: faiss-metal-test-results-${{ env.PACKAGE_TYPE }}-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.short_sha }}-${{ matrix.artifact_suffix }}
           path: test-results
           if-no-files-found: warn
 
@@ -153,6 +154,7 @@ jobs:
           fetch-tags: true
 
       - name: Export conda package metadata
+        id: conda_meta
         shell: bash
         run: |
           branch_name="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-$(git branch --show-current)}}"
@@ -171,12 +173,34 @@ jobs:
             echo "FAISS_CONDA_SHORT_SHA=$short_sha"
             echo "FAISS_CONDA_VERSION=${major}.${minor}.${patch}"
           } >> "$GITHUB_ENV"
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "version=${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
 
           if ! git describe --tags --long >/dev/null 2>&1; then
             echo "FAISS_CONDA_UNTAGGED=1" >> "$GITHUB_ENV"
           fi
 
-      - name: Build Metal backend (conda, no upload)
+      - name: Build Metal backend (conda, no channel upload)
         uses: ./.github/actions/build_conda
         with:
           recipe: faiss
+
+      - name: Collect conda artifacts
+        shell: bash
+        run: |
+          mkdir -p dist-conda
+          find "${CONDA}/conda-bld" -type f \( \
+            -name 'libfaiss-*.conda' -o \
+            -name 'libfaiss-*.tar.bz2' -o \
+            -name 'faiss-cpu-*.conda' -o \
+            -name 'faiss-cpu-*.tar.bz2' \
+          \) -exec cp {} dist-conda/ \;
+          ls -lh dist-conda
+          test "$(find dist-conda -type f | wc -l)" -gt 0
+
+      - name: Upload conda artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: faiss-metal-conda-${{ env.PACKAGE_TYPE }}-${{ steps.conda_meta.outputs.version }}-${{ steps.conda_meta.outputs.short_sha }}
+          path: dist-conda/*
+          if-no-files-found: error
