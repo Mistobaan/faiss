@@ -15,6 +15,10 @@ set(CMAKE_CXX_STANDARD 20)
 find_package(SWIG REQUIRED COMPONENTS python)
 include(${SWIG_USE_FILE})
 
+find_package(Python REQUIRED
+  COMPONENTS Interpreter Development.Module NumPy
+)
+
 set(UseSWIG_TARGET_NAME_PREFERENCE STANDARD)
 set(SWIG_SOURCE_FILE_EXTENSIONS swig)
 
@@ -60,7 +64,7 @@ macro(configure_swigfaiss source)
   endif()
   if(FAISS_ENABLE_METAL)
     set_property(SOURCE ${source} APPEND PROPERTY
-      COMPILE_DEFINITIONS FAISS_ENABLE_METAL
+      COMPILE_DEFINITIONS METAL_WRAPPER
     )
   endif()
 endmacro()
@@ -198,14 +202,26 @@ elseif(WIN32)
   target_compile_options(swigfaiss_sve PRIVATE /bigobj)
   target_compile_options(faiss_example_external_module PRIVATE /bigobj)
 elseif(NOT SKBUILD_SABI_VERSION)
-  # NOTE: Python does not recognize the dylib extension.
-  # When building abi3, the suffix is set to .abi3.so below.
-  set_target_properties(swigfaiss PROPERTIES SUFFIX .so)
-  set_target_properties(swigfaiss_avx2 PROPERTIES SUFFIX .so)
-  set_target_properties(swigfaiss_avx512 PROPERTIES SUFFIX .so)
-  set_target_properties(swigfaiss_avx512_spr PROPERTIES SUFFIX .so)
-  set_target_properties(swigfaiss_sve PROPERTIES SUFFIX .so)
-  set_target_properties(faiss_example_external_module PROPERTIES SUFFIX .so)
+  if(Python_SOABI)
+    set(_FAISS_EXT_SUFFIX ".${Python_SOABI}.so")
+  else()
+    execute_process(
+      COMMAND "${Python_EXECUTABLE}" -c
+        "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))"
+      OUTPUT_VARIABLE _FAISS_EXT_SUFFIX
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if(NOT _FAISS_EXT_SUFFIX)
+      set(_FAISS_EXT_SUFFIX ".so")
+    endif()
+  endif()
+  message(STATUS "Python extension suffix: ${_FAISS_EXT_SUFFIX}")
+  set_target_properties(swigfaiss PROPERTIES SUFFIX "${_FAISS_EXT_SUFFIX}")
+  set_target_properties(swigfaiss_avx2 PROPERTIES SUFFIX "${_FAISS_EXT_SUFFIX}")
+  set_target_properties(swigfaiss_avx512 PROPERTIES SUFFIX "${_FAISS_EXT_SUFFIX}")
+  set_target_properties(swigfaiss_avx512_spr PROPERTIES SUFFIX "${_FAISS_EXT_SUFFIX}")
+  set_target_properties(swigfaiss_sve PROPERTIES SUFFIX "${_FAISS_EXT_SUFFIX}")
+  set_target_properties(faiss_example_external_module PROPERTIES SUFFIX "${_FAISS_EXT_SUFFIX}")
 endif()
 
 if(FAISS_ENABLE_SVS)
@@ -215,6 +231,15 @@ if(FAISS_ENABLE_SVS)
   target_compile_definitions(swigfaiss_avx512_spr PRIVATE FAISS_ENABLE_SVS FAISS_SVS_RUNTIME_VERSION=${FAISS_SVS_RUNTIME_VERSION})
   target_compile_definitions(swigfaiss_sve PRIVATE FAISS_ENABLE_SVS FAISS_SVS_RUNTIME_VERSION=${FAISS_SVS_RUNTIME_VERSION})
   target_compile_definitions(faiss_example_external_module PRIVATE FAISS_ENABLE_SVS FAISS_SVS_RUNTIME_VERSION=${FAISS_SVS_RUNTIME_VERSION})
+endif()
+
+if(FAISS_ENABLE_METAL)
+  target_compile_definitions(swigfaiss PRIVATE METAL_WRAPPER)
+  target_compile_definitions(swigfaiss_avx2 PRIVATE METAL_WRAPPER)
+  target_compile_definitions(swigfaiss_avx512 PRIVATE METAL_WRAPPER)
+  target_compile_definitions(swigfaiss_avx512_spr PRIVATE METAL_WRAPPER)
+  target_compile_definitions(swigfaiss_sve PRIVATE METAL_WRAPPER)
+  target_compile_definitions(faiss_example_external_module PRIVATE METAL_WRAPPER)
 endif()
 
 # Enable DD support in Python bindings when building with Dynamic Dispatch
@@ -241,16 +266,6 @@ if(FAISS_ENABLE_GPU)
     target_link_libraries(swigfaiss_avx512_spr PRIVATE CUDA::cudart $<$<BOOL:${FAISS_ENABLE_CUVS}>:cuvs::cuvs>)
     target_link_libraries(swigfaiss_sve PRIVATE CUDA::cudart $<$<BOOL:${FAISS_ENABLE_CUVS}>:cuvs::cuvs>)
   endif()
-endif()
-
-if(FAISS_ENABLE_METAL)
-  target_link_libraries(swigfaiss PRIVATE
-    faiss_metal
-    "-framework Metal"
-    "-framework MetalKit"
-    "-framework MetalPerformanceShaders"
-    "-framework Foundation"
-  )
 endif()
 
 find_package(OpenMP REQUIRED)
@@ -355,10 +370,6 @@ if(SKBUILD_SABI_VERSION)
     PRIVATE Py_LIMITED_API=${FAISS_PY_LIMITED_API})
 endif()
 
-if ("${CMAKE_SYSTEM_NAME}" MATCHES "AIX")
-target_link_libraries(faiss_python_callbacks PRIVATE faiss)
-endif()
-
 # Hack so that python_callbacks.h can be included as
 # `#include <faiss/python/python_callbacks.h>`.
 target_include_directories(faiss_python_callbacks PRIVATE ${PROJECT_SOURCE_DIR}/../..)
@@ -378,84 +389,94 @@ configure_file(class_wrappers.py class_wrappers.py COPYONLY)
 configure_file(gpu_wrappers.py gpu_wrappers.py COPYONLY)
 configure_file(extra_wrappers.py extra_wrappers.py COPYONLY)
 configure_file(array_conversions.py array_conversions.py COPYONLY)
+configure_file(__init__.pyi __init__.pyi COPYONLY)
+configure_file(py.typed py.typed COPYONLY)
 
 # file(GLOB files "${PROJECT_SOURCE_DIR}/../../contrib/*.py")
 file(COPY ${PROJECT_SOURCE_DIR}/../../contrib  DESTINATION .)
 
-# Install targets for scikit-build-core / pip wheel packaging.
+if(SKBUILD)
+  set(_FAISS_PKG "faiss")
+  set(_FAISS_LIB "faiss/lib")
+  set(_FAISS_SWIG_TARGETS
+    swigfaiss
+    swigfaiss_avx2
+    swigfaiss_avx512
+    swigfaiss_avx512_spr
+    swigfaiss_sve
+  )
 
-# Set RPATH so the SWIG modules find libfaiss in the same directory.
-# auditwheel/delocate follow RPATH to locate libraries for bundling.
-foreach(tgt swigfaiss swigfaiss_avx2 swigfaiss_avx512
-    swigfaiss_avx512_spr swigfaiss_sve)
-  if(TARGET ${tgt})
-    if(APPLE)
-      set_target_properties(${tgt} PROPERTIES INSTALL_RPATH "@loader_path")
-    else()
-      set_target_properties(${tgt} PROPERTIES INSTALL_RPATH "$ORIGIN")
+  foreach(tgt ${_FAISS_SWIG_TARGETS})
+    if(TARGET ${tgt})
+      if(APPLE)
+        set_target_properties(${tgt} PROPERTIES INSTALL_RPATH "@loader_path/lib")
+      elseif(UNIX)
+        set_target_properties(${tgt} PROPERTIES INSTALL_RPATH "$ORIGIN/lib")
+      endif()
     endif()
-  endif()
-endforeach()
+  endforeach()
 
-# Install the SWIG extension modules (.so/.pyd).
-# In DD mode, swigfaiss_avx2/avx512/avx512_spr/sve are also built and
-# loader.py selects the best one at runtime based on CPU capabilities.
-foreach(tgt swigfaiss swigfaiss_avx2 swigfaiss_avx512
-    swigfaiss_avx512_spr swigfaiss_sve)
-  if(TARGET ${tgt})
-    get_target_property(_excluded ${tgt} EXCLUDE_FROM_ALL)
-    if(NOT _excluded)
-      install(TARGETS ${tgt}
-        LIBRARY DESTINATION faiss
-        RUNTIME DESTINATION faiss
+  install(FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/__init__.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/__init__.pyi
+    ${CMAKE_CURRENT_SOURCE_DIR}/py.typed
+    ${CMAKE_CURRENT_SOURCE_DIR}/loader.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/class_wrappers.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/gpu_wrappers.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/extra_wrappers.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/array_conversions.py
+    DESTINATION ${_FAISS_PKG}
+    COMPONENT python
+  )
+
+  install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../contrib/
+    DESTINATION ${_FAISS_PKG}/contrib
+    COMPONENT python
+    FILES_MATCHING
+      PATTERN "*.py"
+      PATTERN "__pycache__" EXCLUDE
+  )
+
+  install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../../contrib/torch/"
+    DESTINATION "${_FAISS_PKG}/contrib/torch"
+    COMPONENT python
+    FILES_MATCHING PATTERN "*.md"
+  )
+
+  foreach(mod ${_FAISS_SWIG_TARGETS})
+    if(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/${mod}.py" OR TARGET ${mod})
+      install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${mod}.py"
+        DESTINATION ${_FAISS_PKG}
+        COMPONENT python
+        OPTIONAL
       )
     endif()
-  endif()
-endforeach()
+  endforeach()
 
-# Install the core faiss shared libraries into the Python package directory
-# so that auditwheel/delocate can find and bundle them with the SWIG modules.
-# Guard: when Python bindings are built standalone (e.g. conda), the faiss
-# target is an installed import library, not a build target.
-foreach(tgt faiss faiss_avx2 faiss_avx512 faiss_avx512_spr faiss_sve)
-  if(TARGET ${tgt})
-    get_target_property(_imported ${tgt} IMPORTED)
-    get_target_property(_excluded ${tgt} EXCLUDE_FROM_ALL)
-    if(NOT _imported AND NOT _excluded)
-      install(TARGETS ${tgt}
-        LIBRARY DESTINATION faiss
-        RUNTIME DESTINATION faiss
-      )
+  foreach(tgt ${_FAISS_SWIG_TARGETS})
+    if(TARGET ${tgt})
+      get_target_property(_excluded ${tgt} EXCLUDE_FROM_ALL)
+      if(NOT _excluded)
+        install(TARGETS ${tgt}
+          LIBRARY DESTINATION ${_FAISS_PKG} COMPONENT python
+          RUNTIME DESTINATION ${_FAISS_PKG} COMPONENT python
+        )
+      endif()
     endif()
-  endif()
-endforeach()
+  endforeach()
 
-# Install SWIG-generated Python wrappers.
-# In DD mode, each variant has its own .py wrapper that loader.py imports.
-foreach(mod swigfaiss swigfaiss_avx2 swigfaiss_avx512
-    swigfaiss_avx512_spr swigfaiss_sve)
-  if(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/${mod}.py" OR TARGET ${mod})
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${mod}.py"
-      DESTINATION faiss
-      OPTIONAL
-    )
-  endif()
-endforeach()
-
-# Install hand-written Python source files
-install(FILES
-  "${CMAKE_CURRENT_SOURCE_DIR}/__init__.py"
-  "${CMAKE_CURRENT_SOURCE_DIR}/loader.py"
-  "${CMAKE_CURRENT_SOURCE_DIR}/class_wrappers.py"
-  "${CMAKE_CURRENT_SOURCE_DIR}/extra_wrappers.py"
-  "${CMAKE_CURRENT_SOURCE_DIR}/gpu_wrappers.py"
-  "${CMAKE_CURRENT_SOURCE_DIR}/array_conversions.py"
-  DESTINATION faiss
-)
-
-# Install type stubs if present
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/__init__.pyi")
-  install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/__init__.pyi" DESTINATION faiss)
+  foreach(tgt faiss faiss_avx2 faiss_avx512 faiss_avx512_spr faiss_sve)
+    if(TARGET ${tgt})
+      get_target_property(_imported ${tgt} IMPORTED)
+      get_target_property(_excluded ${tgt} EXCLUDE_FROM_ALL)
+      if(NOT _imported AND NOT _excluded)
+        install(TARGETS ${tgt}
+          LIBRARY DESTINATION ${_FAISS_LIB} COMPONENT python
+          RUNTIME DESTINATION ${_FAISS_LIB} COMPONENT python
+        )
+      endif()
+    endif()
+  endforeach()
 endif()
 
 # GPU build marker: only present in faiss-gpu wheels. Used by __init__.py to
@@ -468,27 +489,6 @@ if(FAISS_ENABLE_GPU)
     "# Auto-generated when FAISS_ENABLE_GPU=ON.\n"
     "IS_GPU_BUILD = True\n")
   install(FILES "${CMAKE_CURRENT_BINARY_DIR}/_gpu_build.py" DESTINATION faiss)
-endif()
-
-if(FAISS_ENABLE_METAL)
-  find_file(FAISS_METALLIB_FILE MetalDistance.metallib
-    HINTS "${faiss_ROOT}/lib" "${CMAKE_INSTALL_PREFIX}/lib"
-          "${CMAKE_BINARY_DIR}/faiss/gpu_metal"
-    NO_DEFAULT_PATH
-  )
-  if(FAISS_METALLIB_FILE)
-    install(FILES "${FAISS_METALLIB_FILE}" DESTINATION faiss)
-  elseif(TARGET faiss_metal)
-    # In-tree build: the metallib is compiled by the metal_shaders custom
-    # target and does not exist at configure time. Install from the known
-    # build output path — it will be present at install time.
-    install(FILES "${CMAKE_BINARY_DIR}/faiss/gpu_metal/MetalDistance.metallib"
-      DESTINATION faiss)
-  else()
-    message(WARNING
-      "FAISS_ENABLE_METAL is ON but MetalDistance.metallib was not found. "
-      "The Python package will not include GPU Metal support at runtime.")
-  endif()
 endif()
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/py.typed")

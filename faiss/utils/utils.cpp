@@ -138,6 +138,10 @@ std::string get_compile_options() {
     options += "SVS ";
 #endif
 
+#ifdef FAISS_ENABLE_METAL
+    options += "METAL ";
+#endif
+
     options += ref_gpu_compile_options();
 
     return options;
