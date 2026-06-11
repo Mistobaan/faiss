@@ -18,6 +18,7 @@ fi
 PYTHON_BIN="${PYTHON_BIN:-${CONDA_ENV_PREFIX}/bin/python}"
 LIBOMP_PREFIX="${LIBOMP_PREFIX:-${CONDA_ENV_PREFIX}}"
 LIBOMP_DYLIB="${LIBOMP_DYLIB:-${LIBOMP_PREFIX}/lib/libomp.dylib}"
+LIBOMP_INSTALL_NAME="${LIBOMP_INSTALL_NAME:-/opt/llvm-openmp/lib/libomp.dylib}"
 OPENBLAS_PREFIX="${OPENBLAS_PREFIX:-${CONDA_ENV_PREFIX}}"
 OPENBLAS_RUNTIME_DYLIB="${OPENBLAS_RUNTIME_DYLIB:-${OPENBLAS_PREFIX}/lib/libopenblas.0.dylib}"
 GFORTRAN_DYLIB="${GFORTRAN_DYLIB:-${OPENBLAS_PREFIX}/lib/libgfortran.5.dylib}"
@@ -107,6 +108,11 @@ vendor_dylib "${GFORTRAN_DYLIB}" "${VENDORED_GFORTRAN}"
 vendor_dylib "${QUADMATH_DYLIB}" "${VENDORED_QUADMATH}"
 vendor_dylib "${LIBGCC_DYLIB}" "${VENDORED_LIBGCC}"
 
+# Match PyPI PyTorch's macOS libomp install name. faiss.loader preloads either
+# PyTorch's libomp or this vendored fallback, so dyld resolves all OpenMP load
+# commands to a single runtime instead of initializing two libomp images.
+install_name_tool -id "${LIBOMP_INSTALL_NAME}" "${VENDORED_LIBOMP}"
+
 list_rpaths() {
   otool -l "$1" | awk '/cmd LC_RPATH/ { getline; getline; print $2 }'
 }
@@ -139,11 +145,14 @@ rewrite_dependency() {
   fi
 }
 
-rewrite_dependency "${SWIG_SO}" "${LIBOMP_DYLIB}" "@rpath/libomp.dylib"
-rewrite_dependency "${LIBFAISS_DYLIB}" "${LIBOMP_DYLIB}" "@rpath/libomp.dylib"
+rewrite_dependency "${SWIG_SO}" "${LIBOMP_DYLIB}" "${LIBOMP_INSTALL_NAME}"
+rewrite_dependency "${SWIG_SO}" "@rpath/libomp.dylib" "${LIBOMP_INSTALL_NAME}"
+rewrite_dependency "${LIBFAISS_DYLIB}" "${LIBOMP_DYLIB}" "${LIBOMP_INSTALL_NAME}"
+rewrite_dependency "${LIBFAISS_DYLIB}" "@rpath/libomp.dylib" "${LIBOMP_INSTALL_NAME}"
 rewrite_dependency "${LIBFAISS_DYLIB}" "${OPENBLAS_RUNTIME_DYLIB}" "@rpath/$(basename "${OPENBLAS_RUNTIME_DYLIB}")"
 rewrite_dependency "${VENDORED_OPENBLAS}" "${GFORTRAN_DYLIB}" "@rpath/$(basename "${GFORTRAN_DYLIB}")"
-rewrite_dependency "${VENDORED_OPENBLAS}" "${LIBOMP_DYLIB}" "@rpath/libomp.dylib"
+rewrite_dependency "${VENDORED_OPENBLAS}" "${LIBOMP_DYLIB}" "${LIBOMP_INSTALL_NAME}"
+rewrite_dependency "${VENDORED_OPENBLAS}" "@rpath/libomp.dylib" "${LIBOMP_INSTALL_NAME}"
 rewrite_dependency "${VENDORED_GFORTRAN}" "${QUADMATH_DYLIB}" "@rpath/$(basename "${QUADMATH_DYLIB}")"
 rewrite_dependency "${VENDORED_GFORTRAN}" "${LIBGCC_DYLIB}" "@rpath/$(basename "${LIBGCC_DYLIB}")"
 
