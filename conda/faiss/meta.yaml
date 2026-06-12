@@ -120,7 +120,8 @@ outputs:
         - {{ compiler('cxx') }}
         - libcxx =20.1.1  # [osx and arm64]
         - sysroot_linux-64 =2.17 # [linux64]
-        - swig =4.0
+        - swig >=4.2,<5  # [osx and arm64]
+        - swig =4.0  # [not (osx and arm64)]
         - cmake >=3.24.0
         - make =4.2 # [not win and not (osx and arm64)]
         - make =4.4 # [osx and arm64]
@@ -139,6 +140,7 @@ outputs:
         - numpy >=2.0,<3.0
         - pip  # [osx and arm64]
         - packaging  # [osx and arm64]
+        - scikit-build-core >=0.10  # [osx and arm64]
         - setuptools >=80  # [osx and arm64]
         - setuptools  # [not (osx and arm64)]
         - wheel  # [osx and arm64]
