@@ -69,7 +69,7 @@ jobs:
         run: |
           branch_name="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-$(git branch --show-current)}}"
           short_sha="$(git rev-parse --short HEAD)"
-          branch_tag="$(printf '%s' "$branch_name" | tr -c 'A-Za-z0-9_.-' '_' | sed -E 's/^_+//; s/_+$//')"
+          branch_tag="$(printf '%s' "$branch_name" | tr -c 'A-Za-z0-9_' '_' | sed -E 's/^_+//; s/_+$//')"
           major="$(awk '/^#define FAISS_VERSION_MAJOR / { print $3 }' faiss/Index.h)"
           minor="$(awk '/^#define FAISS_VERSION_MINOR / { print $3 }' faiss/Index.h)"
           patch="$(awk '/^#define FAISS_VERSION_PATCH / { print $3 }' faiss/Index.h)"
@@ -159,7 +159,7 @@ jobs:
         run: |
           branch_name="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-$(git branch --show-current)}}"
           short_sha="$(git rev-parse --short HEAD)"
-          branch_tag="$(printf '%s' "$branch_name" | tr -c 'A-Za-z0-9_.-' '_' | sed -E 's/^_+//; s/_+$//')"
+          branch_tag="$(printf '%s' "$branch_name" | tr -c 'A-Za-z0-9_' '_' | sed -E 's/^_+//; s/_+$//')"
           major="$(awk '/^#define FAISS_VERSION_MAJOR / { print $3 }' faiss/Index.h)"
           minor="$(awk '/^#define FAISS_VERSION_MINOR / { print $3 }' faiss/Index.h)"
           patch="$(awk '/^#define FAISS_VERSION_PATCH / { print $3 }' faiss/Index.h)"
