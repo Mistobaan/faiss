@@ -27,14 +27,15 @@ class TestMetalTurboQuant(unittest.TestCase):
         d = 32
         k = 6
         xb, xq = make_data(512, 24, d)
+        qtype = faiss.ScalarQuantizer.QT_2bit_tqmse
 
-        cpu = faiss.IndexTurboQuantMSE(d, 2, faiss.METRIC_L2, 12345, True)
+        cpu = faiss.IndexScalarQuantizer(d, qtype, faiss.METRIC_L2)
+        cpu.train(xb)
         cpu.add(xb)
 
         res = faiss.StandardMetalResources()
-        metal = faiss.MetalIndexTurboQuantMSE(
-            res, d, 2, faiss.METRIC_L2, 12345, True
-        )
+        metal = faiss.MetalIndexScalarQuantizer(res, d, qtype, faiss.METRIC_L2)
+        metal.train(xb)
         metal.add(xb)
 
         D_cpu, I_cpu = cpu.search(xq, k)
@@ -50,12 +51,14 @@ class TestMetalTurboQuant(unittest.TestCase):
         d = 48
         k = 5
         xb, xq = make_data(640, 20, d, seed=4321)
+        qtype = faiss.ScalarQuantizer.QT_4bit_tqmse
 
-        cpu = faiss.IndexTurboQuantMSE(d, 4, faiss.METRIC_L2, 999, True)
+        cpu = faiss.IndexScalarQuantizer(d, qtype, faiss.METRIC_L2)
+        cpu.train(xb)
         cpu.add(xb)
 
         res = faiss.StandardMetalResources()
-        metal = faiss.MetalIndexTurboQuantMSE(res, cpu)
+        metal = faiss.MetalIndexScalarQuantizer(res, cpu)
         self.assertEqual(metal.getDevice(), 0)
         self.assertEqual(metal.getNumVecs(), xb.shape[0])
 
@@ -70,7 +73,7 @@ class TestMetalTurboQuant(unittest.TestCase):
         np.testing.assert_allclose(D_rt, D_cpu, rtol=1e-4, atol=1e-4)
 
         cloned = faiss.index_cpu_to_metal(res, 0, cpu)
-        self.assertIsInstance(cloned, faiss.MetalIndexTurboQuantMSE)
+        self.assertIsInstance(cloned, faiss.MetalIndexScalarQuantizer)
         D_clone, I_clone = cloned.search(xq, k)
         np.testing.assert_array_equal(I_clone, I_cpu)
         np.testing.assert_allclose(D_clone, D_cpu, rtol=1e-4, atol=1e-4)

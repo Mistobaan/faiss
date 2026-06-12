@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
-#include <faiss/IndexTurboQuant.h>
-#include <faiss/metal/MetalIndexTurboQuant.h>
+#include <faiss/IndexScalarQuantizer.h>
+#include <faiss/metal/MetalIndexScalarQuantizer.h>
 #include <faiss/metal/StandardMetalResources.h>
 #include <faiss/utils/random.h>
 
@@ -42,9 +42,11 @@ double mean_squared_error(
 
 TEST(TestMetalTurboQuant, ZeroVectorRoundTrip) {
     faiss::metal::StandardMetalResources resources;
-    faiss::metal::MetalIndexTurboQuantMSE index(&resources, 32, 2);
+    faiss::metal::MetalIndexScalarQuantizer index(
+            &resources, 32, faiss::ScalarQuantizer::QT_2bit_tqmse);
 
     std::vector<float> x(32, 0.0f);
+    index.train(1, x.data());
     index.add(1, x.data());
 
     std::vector<float> decoded(32);
@@ -62,18 +64,24 @@ TEST(TestMetalTurboQuant, ReconstructionImprovesWithMoreBits) {
     std::vector<float> decoded(n * d);
 
     faiss::metal::StandardMetalResources resources;
-    faiss::metal::MetalIndexTurboQuantMSE one(&resources, d, 1);
-    faiss::metal::MetalIndexTurboQuantMSE two(&resources, d, 2);
-    faiss::metal::MetalIndexTurboQuantMSE four(&resources, d, 4);
+    faiss::metal::MetalIndexScalarQuantizer one(
+            &resources, d, faiss::ScalarQuantizer::QT_1bit_tqmse);
+    faiss::metal::MetalIndexScalarQuantizer two(
+            &resources, d, faiss::ScalarQuantizer::QT_2bit_tqmse);
+    faiss::metal::MetalIndexScalarQuantizer four(
+            &resources, d, faiss::ScalarQuantizer::QT_4bit_tqmse);
 
+    one.train(n, x.data());
     one.add(n, x.data());
     one.reconstruct_n(0, n, decoded.data());
     const double err1 = mean_squared_error(x, decoded);
 
+    two.train(n, x.data());
     two.add(n, x.data());
     two.reconstruct_n(0, n, decoded.data());
     const double err2 = mean_squared_error(x, decoded);
 
+    four.train(n, x.data());
     four.add(n, x.data());
     four.reconstruct_n(0, n, decoded.data());
     const double err4 = mean_squared_error(x, decoded);
@@ -91,11 +99,13 @@ TEST(TestMetalTurboQuant, CopyParityAndSearchParity) {
     auto xb = make_unit_vectors(nb, d, 3333);
     auto xq = make_unit_vectors(nq, d, 4444);
 
-    faiss::IndexTurboQuantMSE cpu(d, 2, faiss::METRIC_L2, 12345, true);
+    faiss::IndexScalarQuantizer cpu(
+            d, faiss::ScalarQuantizer::QT_2bit_tqmse, faiss::METRIC_L2);
+    cpu.train(nb, xb.data());
     cpu.add(nb, xb.data());
 
     faiss::metal::StandardMetalResources resources;
-    faiss::metal::MetalIndexTurboQuantMSE metal(&resources, &cpu);
+    faiss::metal::MetalIndexScalarQuantizer metal(&resources, &cpu);
 
     std::vector<float> cpu_distances(nq * k);
     std::vector<faiss::idx_t> cpu_labels(nq * k);
@@ -112,16 +122,15 @@ TEST(TestMetalTurboQuant, CopyParityAndSearchParity) {
         }
     }
 
-    faiss::IndexTurboQuantMSE roundtrip;
+    faiss::IndexScalarQuantizer roundtrip;
     metal.copyTo(&roundtrip);
 
     EXPECT_EQ(roundtrip.code_size, cpu.code_size);
     EXPECT_EQ(roundtrip.ntotal, cpu.ntotal);
     EXPECT_EQ(roundtrip.codes.size(), cpu.codes.size());
-    EXPECT_EQ(roundtrip.tq.nbits, cpu.tq.nbits);
-    EXPECT_EQ(roundtrip.tq.seed, cpu.tq.seed);
-    EXPECT_EQ(roundtrip.tq.store_norm, cpu.tq.store_norm);
-    roundtrip.tq.check_identical(cpu.tq);
+    EXPECT_EQ(roundtrip.sq.qtype, cpu.sq.qtype);
+    EXPECT_EQ(roundtrip.sq.code_size, cpu.sq.code_size);
+    EXPECT_EQ(roundtrip.sq.trained, cpu.sq.trained);
     for (size_t i = 0; i < cpu.codes.size(); i++) {
         EXPECT_EQ(roundtrip.codes[i], cpu.codes[i]);
     }

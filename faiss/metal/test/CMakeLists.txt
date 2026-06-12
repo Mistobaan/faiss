@@ -22,7 +22,7 @@ macro(faiss_add_metal_test file)
 endmacro()
 
 faiss_add_metal_test(TestMetalIndexFlat.mm)
-faiss_add_metal_test(TestMetalTurboQuant.cpp)
+faiss_add_metal_test(TestMetalScalarQuantizer.cpp)
 faiss_add_metal_test(TestMetalCloner.cpp)
 
 add_custom_target(faiss_metal_test DEPENDS ${FAISS_METAL_TEST_TARGETS})
