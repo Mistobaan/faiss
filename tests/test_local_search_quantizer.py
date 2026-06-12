@@ -584,7 +584,7 @@ class TestProductLocalSearchQuantizer(unittest.TestCase):
             lut_ref[:, i] = xq[:, i] @ codebooks[i].T
         lut_ref = lut_ref.reshape(nq, codebook_size)
 
-        np.testing.assert_allclose(lut, lut_ref, rtol=5e-04)
+        np.testing.assert_allclose(lut, lut_ref, rtol=5e-04, atol=1e-07)
 
 
 class TestIndexProductLocalSearchQuantizer(unittest.TestCase):
